@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+{% block title %}Create Account — Finance Analytics Platform{% endblock %}
+
+{% block body %}
+<div class="page-wrapper">
+
+    <aside class="brand-panel">
+    <div class="brand-inner">
+      <div class="brand-logo">
+        <span class="logo-icon">&#9670;</span>
+        <div class="logo-meta">
+          <span class="logo-text">Finance Analytics</span>
+          <span class="logo-subtext">Reporting &amp; Budget Tracking</span>
+        </div>
+      </div>
+      <h2 class="brand-headline">Institutional-grade financial reporting &amp; budget tracking in Rupees (₹).</h2>
+      <p class="brand-sub">Tailored for personal analysts, retail store merchants, and platform finance controllers to manage P&amp;L performance and capital allocation.</p>
+      
+      <div class="brand-features">
+        <div class="feature-item">
+          <span class="feature-icon">&#10003;</span>
+          <div>
+            <strong>INR (₹) Native Currency Engine</strong>
+            <span>All reports, budgets, cashflow figures, and ledger entries denominated in Rupees.</span>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">&#10003;</span>
+          <div>
+            <strong>Multi-Role Workspaces</strong>
+            <span>Dedicated views for Standard Users, Shop Owners, and Platform Administrators.</span>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">&#10003;</span>
+          <div>
+            <strong>Real-Time Budget Telemetry</strong>
+            <span>Category caps, variance indicators, and expenditure alerts.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="brand-badges">
+        <div class="badge"><span class="badge-dot"></span> Bank-Grade 256-bit Encryption</div>
+        <div class="badge"><span class="badge-dot"></span> KYC &amp; Profile Integrity Verified</div>
+      </div>
+    </div>
+  </aside>
+
+    <main class="form-panel">
+    <div class="form-card form-card-wide">
+
+      <div class="form-header">
+        <div class="platform-tag">Financial Workspace Registration</div>
+        <h1 class="form-title">Create your finance account</h1>
+        <p class="form-subtitle">Complete your profile to configure your financial reporting and budget tracking portal.</p>
+      </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">
+              <span class="alert-icon">{% if category == 'danger' %}&#33;{% else %}&#10003;{% endif %}</span>
+              <span>{{ message }}</span>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <form method="POST" action="{{ url_for('register') }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+        <div class="field-row-grid">
+          <div class="field-group">
+            <label for="fullname" class="field-label">Full Name</label>
+            <input
+              type="text"
+              id="fullname"
+              name="fullname"
+              class="field-input"
+              placeholder="e.g. Rahul Sharma"
+              value="{{ fullname }}"
+              autocomplete="name"
+              required
+            />
+          </div>
+
+          <div class="field-group">
+            <label for="email" class="field-label">Email Address</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              class="field-input"
+              placeholder="rahul@example.com"
+              value="{{ email }}"
+              autocomplete="email"
+              pattern="[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
+              title="Enter a valid email address (e.g. name@domain.com)"
+              required
+            />
+          </div>
+        </div>
+
+                <div class="field-row-grid">
+          <div class="field-group">
+            <label for="phone" class="field-label">Phone Number</label>
+            <div class="input-with-prefix">
+              <span class="input-prefix">+91</span>
+              <input
+                type="tel"
+                id="phone"
+                name="phone"
+                class="field-input prefix-padded font-mono"
+                placeholder="9876543210"
+                value="{{ phone }}"
+                maxlength="15"
+                title="Enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9"
+                autocomplete="tel"
+                required
+              />
+            </div>
+            <span class="field-hint">10 digits starting with 6, 7, 8, or 9.</span>
+          </div>
+
+          <div class="field-group">
+            <label for="age" class="field-label">Age (Years)</label>
+            <input
+              type="number"
+              id="age"
+              name="age"
+              min="18"
+              max="110"
+              class="field-input font-mono"
+              placeholder="e.g. 32"
+              value="{{ age }}"
+              required
+            />
+          </div>
+        </div>
+
+                <div class="field-group">
+          <label for="total_income" class="field-label">
+            Annual / Total Income (<span class="currency-tag">₹ INR</span>)
+          </label>
+          <div class="input-with-prefix">
+            <span class="input-prefix font-bold">₹</span>
+            <input
+              type="number"
+              step="1000"
+              min="0"
+              id="total_income"
+              name="total_income"
+              class="field-input prefix-padded font-mono"
+              placeholder="e.g. 1200000"
+              value="{{ total_income }}"
+              required
+            />
+          </div>
+          <span class="field-hint">Used to establish your baseline financial reporting and budget capacity ratios.</span>
+        </div>
+
+                <div class="field-group">
+          <label for="address" class="field-label">Address (Street, City, State, PIN)</label>
+          <textarea
+            id="address"
+            name="address"
+            class="field-textarea"
+            rows="2"
+            placeholder="e.g. Flat 301, Palm Grove Apts, MG Road, Bengaluru, Karnataka - 560001"
+            required
+          >{{ address }}</textarea>
+        </div>
+
+                <div class="field-group">
+          <label class="field-label">Account Role &amp; Financial Scope</label>
+          <div class="role-selector-grid">
+            
+            <label class="role-card {% if role == 'user' %}active{% endif %}">
+              <input type="radio" name="role" value="user" {% if role == 'user' %}checked{% endif %} onchange="updateRoleUI(this.value)">
+              <div class="role-card-body">
+                <div class="role-header-line">
+                  <span class="role-title">Standard User</span>
+                </div>
+                <span class="role-desc">Personal budgets, income &amp; savings tracking in ₹</span>
+              </div>
+            </label>
+
+            <label class="role-card {% if role == 'shop_owner' %}active{% endif %}">
+              <input type="radio" name="role" value="shop_owner" {% if role == 'shop_owner' %}checked{% endif %} onchange="updateRoleUI(this.value)">
+              <div class="role-card-body">
+                <div class="role-header-line">
+                  <span class="role-title">Shop Owner</span>
+                </div>
+                <span class="role-desc">Store sales, retail wholesale inventory &amp; POS expenses in ₹</span>
+              </div>
+            </label>
+
+            <label class="role-card {% if role == 'admin' %}active{% endif %}">
+              <input type="radio" name="role" value="admin" {% if role == 'admin' %}checked{% endif %} onchange="updateRoleUI(this.value)">
+              <div class="role-card-body">
+                <div class="role-header-line">
+                  <span class="role-title">Administrator</span>
+                </div>
+                <span class="role-desc">Consolidated platform P&amp;L &amp; audit controls in ₹</span>
+              </div>
+            </label>
+
+          </div>
+        </div>
+
+                <div class="field-group" id="business-field-wrap">
+          <label for="business_name" class="field-label">
+            <span id="biz-label-text">Shop / Store Name</span>
+            <span class="field-optional" id="biz-optional-tag">(Optional)</span>
+          </label>
+          <input
+            type="text"
+            id="business_name"
+            name="business_name"
+            class="field-input"
+            placeholder="e.g. Metro Mart Superstore"
+            value="{{ business_name }}"
+          />
+          <span class="field-hint" id="biz-hint">Required for Shop Owners to track retail store inventory budgets.</span>
+        </div>
+
+                <div class="field-row-grid">
+          <div class="field-group">
+            <label for="password" class="field-label">Password</label>
+            <div class="input-wrapper">
+              <input
+                type="password"
+                id="password"
+                name="password"
+                class="field-input"
+                placeholder="Min. 8 characters"
+                autocomplete="new-password"
+                required
+              />
+              <button type="button" class="toggle-pw" onclick="togglePw('password', this)" aria-label="Toggle password view">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label for="confirm_password" class="field-label">Confirm Password</label>
+            <div class="input-wrapper">
+              <input
+                type="password"
+                id="confirm_password"
+                name="confirm_password"
+                class="field-input"
+                placeholder="Re-enter password"
+                autocomplete="new-password"
+                required
+              />
+              <button type="button" class="toggle-pw" onclick="togglePw('confirm_password', this)" aria-label="Toggle password view">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary" style="margin-top: 8px;">Register &amp; Open Rupee (₹) Workspace</button>
+
+      </form>
+
+      <p class="form-footer-link">
+        Already registered on the platform? <a href="{{ url_for('login') }}">Sign in here</a>
+      </p>
+
+    </div>
+  </main>
+
+</div>
+
+<script>
+  function togglePw(fieldId, btn) {
+    var input = document.getElementById(fieldId);
+    if (input.type === 'password') {
+      input.type = 'text';
+      btn.style.color = '#1a56db';
+    } else {
+      input.type = 'password';
+      btn.style.color = '';
+    }
+  }
+
+  function updateRoleUI(selectedRole) {
+    document.querySelectorAll('.role-card').forEach(function(card) {
+      var radio = card.querySelector('input[type="radio"]');
+      if (radio && radio.value === selectedRole) {
+        card.classList.add('active');
+      } else {
+        card.classList.remove('active');
+      }
+    });
+
+    var bizWrap = document.getElementById('business-field-wrap');
+    var bizLabel = document.getElementById('biz-label-text');
+    var bizOptional = document.getElementById('biz-optional-tag');
+    var bizInput = document.getElementById('business_name');
+    var bizHint = document.getElementById('biz-hint');
+
+    if (selectedRole === 'shop_owner') {
+      bizLabel.textContent = 'Shop / Store Name';
+      bizOptional.textContent = '(Required)';
+      bizOptional.style.color = '#f97316';
+      bizInput.placeholder = 'e.g. Westside Supermarket & Retail Store';
+      bizHint.textContent = 'This name will appear on your store financial reports and inventory sheets.';
+    } else if (selectedRole === 'admin') {
+      bizLabel.textContent = 'Organization / Enterprise Entity';
+      bizOptional.textContent = '(Optional)';
+      bizOptional.style.color = '#64748b';
+      bizInput.placeholder = 'e.g. Apex Global Financial Group';
+      bizHint.textContent = 'Appears on system-wide audit reports and consolidated P&L statements.';
+    } else {
+      bizLabel.textContent = 'Portfolio / Workspace Label';
+      bizOptional.textContent = '(Optional)';
+      bizOptional.style.color = '#64748b';
+      bizInput.placeholder = 'e.g. Personal Wealth & Budget Tracker';
+      bizHint.textContent = 'Custom label for your personal finance dashboard.';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var activeRadio = document.querySelector('input[name="role"]:checked');
+    if (activeRadio) {
+      updateRoleUI(activeRadio.value);
+    }
+  });
+</script>
+{% endblock %}
