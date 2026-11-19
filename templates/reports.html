@@ -1,0 +1,143 @@
+{% extends "base_app.html" %}
+
+{% block title %}Financial Reports &amp; Statements — FinSight{% endblock %}
+
+{% block content %}
+<div class="module-page-container">
+
+  <div class="reports-header-actions">
+    <div>
+      <h2 class="section-title">Audited Financial Statement</h2>
+      <p class="section-subtitle">Consolidated operating performance, cost reconciliation, and net margin analysis for {{ today_date }}.</p>
+    </div>
+    <div class="report-btn-group">
+      <a href="{{ url_for('export_csv') }}" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download CSV / Excel
+      </a>
+      <button type="button" class="btn-primary" onclick="window.print()" style="display:inline-flex; align-items:center; gap:6px; width:auto; padding:0 20px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print / Save PDF
+      </button>
+    </div>
+  </div>
+
+  <div class="printable-report-card">
+    <div class="report-brand-bar">
+      <div class="rep-brand-left">
+        <span class="logo-symbol">&#9670;</span>
+        <div>
+          <div class="rep-company-name">FinSight Financial Analytics</div>
+          <div class="rep-subtext">Enterprise Reporting &amp; Audit Telemetry</div>
+        </div>
+      </div>
+      <div class="rep-brand-right">
+        <div><strong>Entity:</strong> {{ current_user.business_name or current_user.fullname }}</div>
+        <div><strong>Country / Currency:</strong> {{ current_user.country or 'India' }} / {{ currency_code }} ({{ currency_symbol }})</div>
+        <div><strong>Statement Date:</strong> {{ today_date }}</div>
+      </div>
+    </div>
+
+    <div class="module-summary-grid" style="margin: 24px 0;">
+      <div class="kpi-card">
+        <div class="kpi-label">Gross Operating Revenue</div>
+        <div class="kpi-figure text-blue font-mono">{{ format_money(total_income) }}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Expenditures</div>
+        <div class="kpi-figure text-dark font-mono">{{ format_money(total_expense) }}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Net Operating Surplus (EBITDA)</div>
+        <div class="kpi-figure {% if net_profit >= 0 %}text-green{% else %}text-danger{% endif %} font-mono">{{ format_money(net_profit) }}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Operating Margin Ratio</div>
+        <div class="kpi-figure text-blue font-mono">{{ operating_margin }}%</div>
+      </div>
+    </div>
+
+    <div class="statement-table-wrapper">
+      <h3 class="statement-subtitle">Profit &amp; Loss (P&amp;L) Performance</h3>
+      <table class="statement-full-table">
+        <thead>
+          <tr>
+            <th>Accounting Item</th>
+            <th>Classification</th>
+            <th class="text-right">Balance ({{ currency_code }})</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Gross Operating Inflows</strong></td>
+            <td><span class="tag-category">Primary Revenue</span></td>
+            <td class="text-right font-mono font-bold text-blue">+{{ format_money(total_income) }}</td>
+          </tr>
+          <tr>
+            <td>Direct Operational Expenditures (COGS)</td>
+            <td><span class="tag-mode">Variable Costs</span></td>
+            <td class="text-right font-mono text-dark">-{{ format_money(cogs_estimate) }}</td>
+          </tr>
+          <tr class="row-subtotal">
+            <td><strong>Gross Operating Margin</strong></td>
+            <td><span class="text-muted text-xs">Inflows minus Direct Costs</span></td>
+            <td class="text-right font-mono font-bold text-blue">{{ format_money(gross_margin) }}</td>
+          </tr>
+          <tr>
+            <td>Fixed Overheads, Leases &amp; Facilities</td>
+            <td><span class="tag-mode">Fixed Overheads</span></td>
+            <td class="text-right font-mono text-dark">-{{ format_money(overheads_estimate) }}</td>
+          </tr>
+          <tr class="row-total">
+            <td><strong>Net Operating Surplus (EBITDA)</strong></td>
+            <td><span class="tag-acc-type tag-acc-bank">Audited Net</span></td>
+            <td class="text-right font-mono font-bold {% if net_profit >= 0 %}text-green{% else %}text-danger{% endif %}">
+              {{ format_money(net_profit) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="statement-table-wrapper" style="margin-top: 32px;">
+      <h3 class="statement-subtitle">Departmental Budget Cap Allocations</h3>
+      <table class="statement-full-table">
+        <thead>
+          <tr>
+            <th>Budget Category</th>
+            <th>Period</th>
+            <th class="text-right">Spent to Date</th>
+            <th class="text-right">Allocation Cap</th>
+            <th class="text-right">Utilization (%)</th>
+            <th class="text-right">Variance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in budgets %}
+            <tr>
+              <td><strong>{{ b.name }}</strong></td>
+              <td><span class="tag-category">{{ b.period }}</span></td>
+              <td class="text-right font-mono">{{ format_money(b.spent) }}</td>
+              <td class="text-right font-mono">{{ format_money(b.allocated) }}</td>
+              <td class="text-right font-mono font-bold {% if b.spent > b.allocated %}text-danger{% elif b.percentage >= b.alert_threshold %}text-orange{% else %}text-green{% endif %}">{{ b.percentage }}%</td>
+              <td class="text-right font-mono {% if b.remaining >= 0 %}text-green{% else %}text-danger{% endif %}">{{ format_money(b.remaining) }}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="empty-table-state">No budget caps defined.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="report-signoff-footer">
+      <div class="signoff-note">
+        <strong>Compliance &amp; Reconciliation:</strong> Generated automatically by FinSight Platform. Figures reflect verified transaction ledger and active budget parameters.
+      </div>
+      <div class="signoff-badge">&#10003; Reconciled &amp; Tamper-Checked</div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

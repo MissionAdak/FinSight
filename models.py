@@ -7,22 +7,29 @@ db = SQLAlchemy()
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
 
-    id            = db.Column(db.Integer, primary_key=True)
-    fullname      = db.Column(db.String(120), nullable=False)
-    email         = db.Column(db.String(150), unique=True, nullable=False)
-    password      = db.Column(db.String(256), nullable=False)
-    role          = db.Column(db.String(50), nullable=False, default='user')
-    business_name = db.Column(db.String(150), nullable=True)
+    id                    = db.Column(db.Integer, primary_key=True)
+    fullname              = db.Column(db.String(120), nullable=False)
+    email                 = db.Column(db.String(150), unique=True, nullable=False)
+    password              = db.Column(db.String(256), nullable=False)
+    role                  = db.Column(db.String(50), nullable=False, default='user')
+    business_name         = db.Column(db.String(150), nullable=True)
     
-    age           = db.Column(db.Integer, nullable=True)
-    phone         = db.Column(db.String(30), nullable=True)
-    address       = db.Column(db.String(300), nullable=True)
-    total_income  = db.Column(db.Float, nullable=True, default=0.0)
+    age                   = db.Column(db.Integer, nullable=True)
+    phone                 = db.Column(db.String(30), nullable=True)
+    address               = db.Column(db.String(300), nullable=True)
+    total_income          = db.Column(db.Float, nullable=True, default=0.0)
 
-    created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    country               = db.Column(db.String(100), default='India')
+    currency              = db.Column(db.String(10), default='INR')
+    theme                 = db.Column(db.String(10), default='light')
+    income_sources        = db.Column(db.String(255), nullable=True)
+    financial_preferences = db.Column(db.String(255), nullable=True)
 
-    transactions  = db.relationship('Transaction', backref='user', cascade="all, delete-orphan", lazy=True)
-    budgets       = db.relationship('BudgetCategory', backref='user', cascade="all, delete-orphan", lazy=True)
+    created_at            = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    transactions          = db.relationship('Transaction', backref='user', cascade="all, delete-orphan", lazy=True)
+    budgets               = db.relationship('BudgetCategory', backref='user', cascade="all, delete-orphan", lazy=True)
+    accounts              = db.relationship('Account', backref='user', cascade="all, delete-orphan", lazy=True)
 
     @property
     def role_title(self):
@@ -54,38 +61,56 @@ class User(UserMixin, db.Model):
         return f'<User {self.email} ({self.role})>'
 
 
+class Account(db.Model):
+    __tablename__ = 'accounts'
+
+    id           = db.Column(db.Integer, primary_key=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name         = db.Column(db.String(100), nullable=False)
+    account_type = db.Column(db.String(50), default='Bank')
+    balance      = db.Column(db.Float, default=0.0)
+
+    transactions = db.relationship('Transaction', backref='account', lazy=True)
+
+    def __repr__(self):
+        return f'<Account {self.name} ({self.account_type}): {self.balance}>'
+
+
 class Transaction(db.Model):
     __tablename__ = 'transactions'
 
-    id       = db.Column(db.Integer, primary_key=True)
-    user_id  = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    title    = db.Column(db.String(150), nullable=False)
-    category = db.Column(db.String(80), nullable=False)
-    amount   = db.Column(db.Float, nullable=False)
-    txn_type = db.Column(db.String(20), nullable=False)
-    date     = db.Column(db.String(50), nullable=False)
-    status   = db.Column(db.String(30), default='Completed')
-    notes    = db.Column(db.String(250), nullable=True)
+    id           = db.Column(db.Integer, primary_key=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    account_id   = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
+    title        = db.Column(db.String(150), nullable=False)
+    category     = db.Column(db.String(80), nullable=False)
+    amount       = db.Column(db.Float, nullable=False)
+    txn_type     = db.Column(db.String(20), nullable=False)
+    payment_mode = db.Column(db.String(50), default='UPI')
+    date         = db.Column(db.String(50), nullable=False)
+    status       = db.Column(db.String(30), default='Completed')
+    notes        = db.Column(db.String(250), nullable=True)
 
     def __repr__(self):
-        return f'<Transaction {self.title} ₹{self.amount}>'
+        return f'<Transaction {self.title} {self.amount}>'
 
 
 class BudgetCategory(db.Model):
     __tablename__ = 'budget_categories'
 
-    id        = db.Column(db.Integer, primary_key=True)
-    user_id   = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    name      = db.Column(db.String(100), nullable=False)
-    allocated = db.Column(db.Float, nullable=False)
-    spent     = db.Column(db.Float, nullable=False, default=0.0)
-    period    = db.Column(db.String(50), default='Monthly')
+    id              = db.Column(db.Integer, primary_key=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name            = db.Column(db.String(100), nullable=False)
+    allocated       = db.Column(db.Float, nullable=False)
+    spent           = db.Column(db.Float, nullable=False, default=0.0)
+    period          = db.Column(db.String(20), default='Monthly')
+    alert_threshold = db.Column(db.Integer, default=80)
 
     @property
     def percentage(self):
         if self.allocated <= 0:
             return 0
-        return min(round((self.spent / self.allocated) * 100, 1), 100)
+        return round((self.spent / self.allocated) * 100, 1)
 
     @property
     def remaining(self):
@@ -96,7 +121,7 @@ class BudgetCategory(db.Model):
         pct = (self.spent / self.allocated * 100) if self.allocated > 0 else 0
         if pct > 100:
             return 'Over Budget'
-        elif pct >= 80:
+        elif pct >= self.alert_threshold:
             return 'Near Limit'
         return 'Healthy'
 
@@ -105,9 +130,14 @@ class BudgetCategory(db.Model):
         pct = (self.spent / self.allocated * 100) if self.allocated > 0 else 0
         if pct > 100:
             return 'status-danger'
-        elif pct >= 80:
+        elif pct >= self.alert_threshold:
             return 'status-warning'
         return 'status-success'
 
+    @property
+    def is_alert(self):
+        pct = (self.spent / self.allocated * 100) if self.allocated > 0 else 0
+        return pct >= self.alert_threshold
+
     def __repr__(self):
-        return f'<BudgetCategory {self.name}: ₹{self.spent}/₹{self.allocated}>'
+        return f'<BudgetCategory {self.name}: {self.spent}/{self.allocated}>'

@@ -1,20 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Sign In — Finance Analytics Platform (INR ₹){% endblock %}
+{% block title %}Sign In — FinSight Finance Management{% endblock %}
 
 {% block body %}
 <div class="page-wrapper">
 
-    <aside class="brand-panel">
+  <aside class="brand-panel">
     <div class="brand-inner">
       <div class="brand-logo">
         <span class="logo-icon">&#9670;</span>
         <div class="logo-meta">
-          <span class="logo-text">Finance Analytics</span>
-          <span class="logo-subtext">Reporting &amp; Budget Tracking (₹)</span>
+          <span class="logo-text">FinSight</span>
+          <span class="logo-subtext">Milestone 1: Core Finance</span>
         </div>
       </div>
       <h2 class="brand-headline">Unified financial intelligence across every department.</h2>
-      <p class="brand-sub">Access real-time P&amp;L performance metrics, category budget variances, cashflow forecasting, and multi-entity retail ledgers in Rupees (₹).</p>
+      <p class="brand-sub">Access real-time P&amp;L performance metrics, category budget variances, cashflow forecasting, and multi-entity retail ledgers across 20 global currencies.</p>
       
       <div class="brand-features">
         <div class="feature-item">
@@ -27,14 +27,14 @@
         <div class="feature-item">
           <span class="feature-icon">&#10003;</span>
           <div>
-            <strong>INR (₹) Financial Statements</strong>
-            <span>Generate dynamic P&amp;L statements and operating balance sheets.</span>
+            <strong>Multi-Currency Financial Engine</strong>
+            <span>Generate dynamic P&amp;L statements in USD, EUR, GBP, INR, JPY, and more.</span>
           </div>
         </div>
         <div class="feature-item">
           <span class="feature-icon">&#10003;</span>
           <div>
-            <strong>Dynamic Budget Tracking</strong>
+            <strong>Proactive Budget Telemetry</strong>
             <span>Enforce hard and advisory spending caps with variance telemetry.</span>
           </div>
         </div>
@@ -47,16 +47,16 @@
     </div>
   </aside>
 
-    <main class="form-panel">
+  <main class="form-panel">
     <div class="form-card">
 
       <div class="form-header">
-        <div class="platform-tag">Enterprise &amp; Retail Portal</div>
+        <div class="platform-tag">FinSight Portal Authentication</div>
         <h1 class="form-title">Sign in to your account</h1>
         <p class="form-subtitle">Select your login role and enter your registered credentials.</p>
       </div>
 
-            {% with messages = get_flashed_messages(with_categories=true) %}
+      {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
             <div class="alert alert-{{ category }}">
@@ -135,7 +135,7 @@
           </label>
         </div>
 
-        <button type="submit" class="btn-primary">Sign In to Dashboard</button>
+        <button type="submit" class="btn-primary">Sign In to FinSight</button>
 
       </form>
 

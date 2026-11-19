@@ -1,612 +1,328 @@
-{% extends "base.html" %}
-{% block title %}Finance Analytics Platform for Financial Reporting and Budget Tracking (INR ₹){% endblock %}
+{% extends "base_app.html" %}
 
-{% block body %}
-<div class="dashboard-wrapper">
+{% block title %}FinSight Dashboard — {{ current_user.fullname }}{% endblock %}
 
-    <nav class="topnav">
-    <div class="topnav-brand">
-      <span class="logo-icon">&#9670;</span>
-      <div class="topnav-brand-text">
-        <span class="brand-title">Finance Analytics</span>
-        <span class="brand-chip">Reporting &amp; Budgeting (₹)</span>
+{% block content %}
+<div class="dashboard-content-grid">
+
+  <div class="dashboard-hero-banner">
+    <div class="hero-text-block">
+      <div class="hero-pill">
+        <span class="status-indicator-dot"></span> Active FinSight Telemetry
       </div>
+      <h2 class="hero-title">Financial Reporting &amp; Budget Tracking</h2>
+      <p class="hero-subtitle">
+        Overview for 
+        <strong class="text-blue">
+          {% if current_user.is_shop_owner %}
+            {{ current_user.business_name or 'Retail Storefront & Wholesale Operations' }}
+          {% elif current_user.is_admin %}
+            FinSight Enterprise Portfolio &amp; Merchant Clearing
+          {% else %}
+            Personal Wealth &amp; Living Budget Workspace
+          {% endif %}
+        </strong>
+      </p>
     </div>
-    
-    <div class="topnav-right">
-      <div class="user-profile-badge">
-        <div class="user-avatar">{{ current_user.fullname[0].upper() }}</div>
-        <div class="user-meta">
-          <span class="user-name">{{ current_user.fullname }}</span>
-          <span class="user-role-tag {{ current_user.role_badge_class }}">
-            {% if current_user.role == 'admin' %}Administrator
-            {% elif current_user.role == 'shop_owner' %}Shop Owner
-            {% else %}Standard User{% endif %}
-          </span>
-        </div>
-      </div>
 
-      <button type="button" class="btn-action-primary" onclick="openModal('modal-transaction')">
-        <span class="btn-icon">+</span> Log Entry (₹)
-      </button>
-
-      <a href="{{ url_for('logout') }}" class="btn-logout" title="Sign out of your session">
-        Sign Out
-      </a>
-    </div>
-  </nav>
-
-    <div class="dashboard-alerts">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="alert alert-{{ category }}">
-            <span class="alert-icon">{% if category == 'danger' %}&#33;{% else %}&#10003;{% endif %}</span>
-            <span>{{ message }}</span>
-          </div>
-        {% endfor %}
+    <div class="hero-profile-summary">
+      <div class="profile-tag-item"><strong>Country:</strong> {{ current_user.country or 'India' }}</div>
+      <span class="hero-divider">•</span>
+      <div class="profile-tag-item"><strong>Currency:</strong> <span class="badge-curr">{{ currency_code }} ({{ currency_symbol }})</span></div>
+      <span class="hero-divider">•</span>
+      <div class="profile-tag-item"><strong>Contact:</strong> {{ current_user.phone or 'Not Provided' }}</div>
+      {% if current_user.total_income and current_user.total_income > 0 %}
+        <span class="hero-divider">•</span>
+        <div class="profile-tag-item"><strong>Annual Income:</strong> <span class="font-mono font-bold text-blue">{{ format_money(current_user.total_income) }}</span></div>
       {% endif %}
-    {% endwith %}
+    </div>
   </div>
 
-    <main class="dashboard-main">
-
-        <header class="platform-banner">
-      <div class="platform-banner-content">
-        <div class="portal-badge-pill">
-          <span class="pulse-indicator"></span> Real-Time Financial Telemetry (INR ₹)
-        </div>
-        <h1 class="platform-banner-title">Finance Analytics Platform for Financial Reporting and Budget Tracking</h1>
-        <p class="platform-banner-subtitle">
-          Consolidated performance metrics, cashflow reconciliation, and departmental budget enforcement for 
-          <span class="entity-highlight">
-            {% if current_user.role == 'shop_owner' %}
-              {{ current_user.business_name or 'Retail Storefront & Wholesale Operations' }}
-            {% elif current_user.role == 'admin' %}
-              Enterprise Platform Portfolio &amp; Multi-Merchant Network
-            {% else %}
-              Personal Wealth &amp; Operational Budget Workspace
-            {% endif %}
-          </span>
-        </p>
-
-                <div class="user-registration-metadata">
-          {% if current_user.phone %}
-            <span class="meta-profile-item"><strong>Phone:</strong> {{ current_user.phone }}</span>
-          {% endif %}
-          {% if current_user.age %}
-            <span class="meta-divider">•</span>
-            <span class="meta-profile-item"><strong>Age:</strong> {{ current_user.age }} years</span>
-          {% endif %}
-          {% if current_user.total_income and current_user.total_income > 0 %}
-            <span class="meta-divider">•</span>
-            <span class="meta-profile-item"><strong>Declared Income:</strong> <span class="font-mono font-bold text-blue">₹{{ "{:,.2f}".format(current_user.total_income) }}</span></span>
-          {% endif %}
-          {% if current_user.address %}
-            <span class="meta-divider">•</span>
-            <span class="meta-profile-item"><strong>Address:</strong> {{ current_user.address }}</span>
-          {% endif %}
-        </div>
-
-        <div class="platform-banner-meta" style="margin-top: 10px;">
-          <span class="meta-item"><strong>Active Role:</strong> {{ current_user.role_title }}</span>
-          <span class="meta-divider">•</span>
-          <span class="meta-item"><strong>Account:</strong> {{ current_user.email }}</span>
-          <span class="meta-divider">•</span>
-          <span class="meta-item"><strong>Fiscal Period:</strong> Q4 FY2024 / November</span>
-          <span class="meta-divider">•</span>
-          <span class="meta-item"><strong>Currency Standard:</strong> <span class="currency-tag">Indian Rupee (₹ INR)</span></span>
-        </div>
+  <div class="kpi-cards-grid">
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Total Inflow (Income)</span>
+        <span class="kpi-icon-pill icon-inflow">&#8593;</span>
       </div>
+      <div class="kpi-figure text-blue font-mono">{{ format_money(total_income) }}</div>
+      <div class="kpi-sub">
+        <span class="kpi-badge-positive">+14.6%</span>
+        <span>vs previous fiscal period</span>
+      </div>
+    </div>
 
-      <div class="banner-quick-actions">
-        <button type="button" class="btn-secondary-outline" onclick="openModal('modal-budget')">
-          Adjust Budgets
-        </button>
-        <button type="button" class="btn-secondary-outline" onclick="window.print()">
-          Export Report
-        </button>
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Total Outflow (Expenses)</span>
+        <span class="kpi-icon-pill icon-outflow">&#8595;</span>
       </div>
-    </header>
+      <div class="kpi-figure text-dark font-mono">{{ format_money(total_expense) }}</div>
+      <div class="kpi-sub">
+        <span class="kpi-badge-neutral">{{ (total_expense / total_income * 100)|round(1) if total_income > 0 else 0 }}%</span>
+        <span>absorption ratio</span>
+      </div>
+    </div>
 
-        {% if current_user.is_admin %}
-      <div class="role-context-banner role-admin-banner">
-        <div class="context-details">
-          <strong>Enterprise Platform Administrator Control (₹ INR):</strong>
-          <span>Consolidated oversight across corporate holdings, UPI/IMPS clearing gateways, RBI regulatory reserve requirements, and multi-merchant platform audits.</span>
-        </div>
-        <div class="admin-quick-stats">
-          <span class="mini-stat">Merchants Monitored: <strong>{{ admin_system_metrics.merchants }} Active</strong></span>
-          <span class="mini-stat">Audit Compliance: <strong>SOC2 / RBI Verified</strong></span>
-        </div>
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Total Savings (Net Profit)</span>
+        <span class="kpi-icon-pill icon-savings">&#9670;</span>
       </div>
-    {% elif current_user.is_shop_owner %}
-      <div class="role-context-banner role-shop-banner">
-        <div class="context-details">
-          <strong>Store Merchant &amp; Retail Financial Dashboard (₹ INR):</strong>
-          <span>Managing point-of-sale daily intake, wholesale supplier invoice schedules, store operating overheads, and inventory restock variance for <em>{{ current_user.business_name or 'Retail Store' }}</em>.</span>
-        </div>
-        <div class="shop-quick-stats">
-          <span class="mini-stat">Stock Turnover: <strong>14.2 Days</strong></span>
-          <span class="mini-stat">POS Settlement: <strong>Daily UPI Auto-Batch</strong></span>
-        </div>
+      <div class="kpi-figure {% if net_profit >= 0 %}text-green{% else %}text-danger{% endif %} font-mono">
+        {{ format_money(net_profit) }}
       </div>
-    {% else %}
-      <div class="role-context-banner role-user-banner">
-        <div class="context-details">
-          <strong>Personal Financial Reporting &amp; Budget Tracker (₹ INR):</strong>
-          <span>Monitoring monthly salary inflows, fixed living expenditures, discretionary category caps, and net personal savings trajectory.</span>
-        </div>
-        <div class="user-quick-stats">
-          <span class="mini-stat">Savings Rate: <strong>{{ operating_margin }}% of Income</strong></span>
-          <span class="mini-stat">Emergency Runway: <strong>6.8 Months</strong></span>
-        </div>
+      <div class="kpi-sub">
+        <span class="kpi-badge-positive">{{ operating_margin }}%</span>
+        <span>operating net margin</span>
       </div>
-    {% endif %}
+    </div>
 
-        <section class="dashboard-section">
-      <div class="section-header-row">
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Budget Utilization</span>
+        <span class="kpi-icon-pill icon-budget">&#37;</span>
+      </div>
+      <div class="kpi-figure text-blue font-mono">{{ budget_utilization }}%</div>
+      <div class="kpi-sub">
+        <span class="kpi-badge-neutral">{{ format_money(budget_variance) }}</span>
+        <span>remaining variance cap</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-charts-grid">
+    <div class="chart-card">
+      <div class="chart-card-header">
         <div>
-          <h2 class="section-title">1. Financial Reporting &amp; Cashflow Telemetry (₹)</h2>
-          <p class="section-subtitle">Real-time P&amp;L accounting, operational revenue, cost ratios, and net surplus margins denominated in Indian Rupees.</p>
+          <h3 class="chart-title">Expense Breakdown by Category</h3>
+          <span class="chart-caption">Categorical distribution across active ledger</span>
         </div>
-        <div class="period-pill-selector">
-          <span class="period-pill active">November 2024</span>
-          <span class="period-pill">Q4 FY24</span>
-          <span class="period-pill">Annual YTD</span>
+        <div class="chart-total-pill">
+          <span>Total: <strong>{{ format_money(total_expense) }}</strong></span>
         </div>
       </div>
-
-            <div class="kpi-grid">
-        
-                <div class="kpi-card">
-          <div class="kpi-header">
-            <span class="kpi-title">
-              {% if current_user.is_admin %}Total Monitored Revenue
-              {% elif current_user.is_shop_owner %}Store Gross Revenue
-              {% else %}Total Monthly Inflow{% endif %}
-            </span>
-            <span class="kpi-icon kpi-icon-blue">&#8593;</span>
-          </div>
-          <div class="kpi-value text-blue">₹{{ "{:,.2f}".format(total_income) }}</div>
-          <div class="kpi-footer">
-            <span class="kpi-badge-positive">+14.6%</span>
-            <span class="kpi-footer-text">compared to previous 30 days</span>
-          </div>
+      <div class="donut-chart-container">
+        <div class="donut-canvas-wrap">
+          <canvas id="expenseDonutChart"></canvas>
         </div>
-
-                <div class="kpi-card">
-          <div class="kpi-header">
-            <span class="kpi-title">
-              {% if current_user.is_admin %}Consolidated Operating Costs
-              {% elif current_user.is_shop_owner %}Store Operating Expenses
-              {% else %}Total Living Outflows{% endif %}
-            </span>
-            <span class="kpi-icon kpi-icon-orange">&#8595;</span>
-          </div>
-          <div class="kpi-value text-dark">₹{{ "{:,.2f}".format(total_expense) }}</div>
-          <div class="kpi-footer">
-            <span class="kpi-badge-neutral">{{ (total_expense / total_income * 100)|round(1) if total_income > 0 else 0 }}%</span>
-            <span class="kpi-footer-text">expense absorption ratio</span>
-          </div>
-        </div>
-
-                <div class="kpi-card">
-          <div class="kpi-header">
-            <span class="kpi-title">
-              {% if current_user.is_admin %}Net Platform Surplus (EBITDA)
-              {% elif current_user.is_shop_owner %}Net Retail Operating Profit
-              {% else %}Net Savings Surplus{% endif %}
-            </span>
-            <span class="kpi-icon kpi-icon-green font-bold">NET</span>
-          </div>
-          <div class="kpi-value {% if net_profit >= 0 %}text-green{% else %}text-danger{% endif %}">
-            {% if net_profit >= 0 %}₹{{ "{:,.2f}".format(net_profit) }}{% else %}-₹{{ "{:,.2f}".format(net_profit|abs) }}{% endif %}
-          </div>
-          <div class="kpi-footer">
-            <span class="kpi-badge-positive">{{ operating_margin }}%</span>
-            <span class="kpi-footer-text">net operating margin</span>
-          </div>
-        </div>
-
-                <div class="kpi-card">
-          <div class="kpi-header">
-            <span class="kpi-title">Budget Allocation Health</span>
-            <span class="kpi-icon kpi-icon-purple font-bold">CAP</span>
-          </div>
-          <div class="kpi-value text-blue">{{ budget_utilization }}%</div>
-          <div class="kpi-footer">
-            <span class="kpi-badge-neutral">₹{{ "{:,.2f}".format(budget_variance) }}</span>
-            <span class="kpi-footer-text">unallocated remaining cap</span>
-          </div>
-        </div>
-
-      </div>
-
-            <div class="analytics-dual-grid" style="margin-top: 20px;">
-
-                <div class="analytics-card">
-          <div class="card-title-bar">
-            <div>
-              <h3 class="card-title">6-Month Cashflow Trajectory (Inflow vs. Outflow)</h3>
-              <span class="card-caption">Visual variance of gross inflows against expenditures in ₹</span>
-            </div>
-            <div class="chart-legend">
-              <span class="legend-item"><span class="legend-dot dot-blue"></span> Inflows</span>
-              <span class="legend-item"><span class="legend-dot dot-orange"></span> Expenditures</span>
-            </div>
-          </div>
-
-          <div class="visual-bar-chart">
-            {% for m in months_data %}
-              <div class="chart-bar-group">
-                <div class="bars-container">
-                                    <div class="bar bar-income" style="height: {{ (m.income / max_metric * 100)|round(0) }}%" title="{{ m.name }} Inflow: ₹{{ '{:,.0f}'.format(m.income) }}">
-                    <span class="bar-tooltip">₹{{ "{:,.0f}".format(m.income) }}</span>
-                  </div>
-                                    <div class="bar bar-expense" style="height: {{ (m.expense / max_metric * 100)|round(0) }}%" title="{{ m.name }} Expense: ₹{{ '{:,.0f}'.format(m.expense) }}">
-                    <span class="bar-tooltip">₹{{ "{:,.0f}".format(m.expense) }}</span>
-                  </div>
-                </div>
-                <span class="bar-label">{{ m.name }}</span>
+        <div class="donut-legend-list">
+          {% for item in donut_items %}
+            <div class="donut-legend-row">
+              <div class="legend-color-label">
+                <span class="legend-swatch" style="background-color: {{ item.color }};"></span>
+                <span class="legend-name">{{ item.name }}</span>
               </div>
-            {% endfor %}
-          </div>
-        </div>
-
-                <div class="analytics-card">
-          <div class="card-title-bar">
-            <div>
-              <h3 class="card-title">Income Statement (P&amp;L Performance)</h3>
-              <span class="card-caption">Audited breakdown for current fiscal period</span>
+              <div class="legend-values">
+                <span class="legend-amount font-mono">{{ format_money(item.amount) }}</span>
+                <span class="legend-pct">{{ item.pct }}%</span>
+              </div>
             </div>
-            <span class="audit-check-pill">&#10003; Reconciled</span>
-          </div>
-
-          <table class="financial-statement-table">
-            <thead>
-              <tr>
-                <th>Accounting Item</th>
-                <th>Category</th>
-                <th class="text-right">Balance (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>Gross Operating Inflows</strong></td>
-                <td><span class="table-tag tag-blue">Inflow</span></td>
-                <td class="text-right font-mono text-blue font-bold">+₹{{ "{:,.2f}".format(total_income) }}</td>
-              </tr>
-              <tr>
-                <td>Direct Operational Costs</td>
-                <td><span class="table-tag tag-neutral">COGS / Variable</span></td>
-                <td class="text-right font-mono text-dark">-₹{{ "{:,.2f}".format(total_expense * 0.65) }}</td>
-              </tr>
-              <tr>
-                <td><strong>Gross Operating Margin</strong></td>
-                <td><span class="table-tag tag-neutral">Gross Margin</span></td>
-                <td class="text-right font-mono font-bold">₹{{ "{:,.2f}".format(total_income - (total_expense * 0.65)) }}</td>
-              </tr>
-              <tr>
-                <td>Fixed Overheads &amp; Administrative Caps</td>
-                <td><span class="table-tag tag-orange">Fixed Budget</span></td>
-                <td class="text-right font-mono text-dark">-₹{{ "{:,.2f}".format(total_expense * 0.35) }}</td>
-              </tr>
-              <tr class="table-total-row">
-                <td><strong>Net Operating Surplus (EBITDA)</strong></td>
-                <td><span class="table-tag tag-green">Net Performance</span></td>
-                <td class="text-right font-mono font-bold text-green">{% if net_profit >= 0 %}₹{{ "{:,.2f}".format(net_profit) }}{% else %}-₹{{ "{:,.2f}".format(net_profit|abs) }}{% endif %}</td>
-              </tr>
-            </tbody>
-          </table>
+          {% else %}
+            <div class="no-chart-data">No expense records found.</div>
+          {% endfor %}
         </div>
-
       </div>
-    </section>
+    </div>
 
-        <section class="dashboard-section">
-      <div class="section-header-row">
+    <div class="chart-card">
+      <div class="chart-card-header">
         <div>
-          <h2 class="section-title">2. Departmental &amp; Category Budget Tracking</h2>
-          <p class="section-subtitle">Real-time expenditure telemetry against designated spending caps and threshold alerts.</p>
+          <h3 class="chart-title">Monthly Trend (Income vs. Expenses)</h3>
+          <span class="chart-caption">6-Month historical cashflow trajectory</span>
         </div>
-        <button type="button" class="btn-sm-primary" onclick="openModal('modal-budget')">
-          + New Budget Category
-        </button>
-      </div>
-
-            <div class="macro-budget-panel">
-        <div class="macro-meta-row">
-          <div class="macro-metric">
-            <span class="macro-label">Total Allocated Limit</span>
-            <span class="macro-val font-mono">₹{{ "{:,.2f}".format(total_allocated) }}</span>
-          </div>
-          <div class="macro-metric">
-            <span class="macro-label">Total Expensed to Date</span>
-            <span class="macro-val font-mono text-blue">₹{{ "{:,.2f}".format(total_budget_spent) }}</span>
-          </div>
-          <div class="macro-metric">
-            <span class="macro-label">Remaining Spendable Variance</span>
-            <span class="macro-val font-mono {% if budget_variance >= 0 %}text-green{% else %}text-danger{% endif %}">
-              ₹{{ "{:,.2f}".format(budget_variance) }}
-            </span>
-          </div>
-          <div class="macro-metric">
-            <span class="macro-label">Aggregated Burn Rate</span>
-            <span class="macro-val font-bold text-dark">{{ budget_utilization }}%</span>
-          </div>
-        </div>
-
-        <div class="macro-progress-track">
-          <div class="macro-progress-fill {% if budget_utilization > 100 %}fill-danger{% elif budget_utilization > 80 %}fill-warning{% else %}fill-blue{% endif %}"
-               style="width: {{ [budget_utilization, 100]|min }}%"></div>
+        <div class="chart-legend-row">
+          <span class="legend-indicator dot-blue"></span> Inflow
+          <span class="legend-indicator dot-orange ml-3"></span> Outflow
         </div>
       </div>
-
-            <div class="budget-cards-grid">
-        {% for b in budgets %}
-          <div class="budget-card">
-            <div class="budget-card-header">
-              <div class="budget-card-title-group">
-                <span class="budget-category-name">{{ b.name }}</span>
-                <span class="budget-period-tag">{{ b.period }} Allocation</span>
-              </div>
-              <span class="budget-status-pill {{ b.status_class }}">{{ b.status }}</span>
-            </div>
-
-            <div class="budget-figures">
-              <div class="figure-item">
-                <span class="figure-label">Spent:</span>
-                <span class="figure-val font-mono font-bold">₹{{ "{:,.2f}".format(b.spent) }}</span>
-              </div>
-              <div class="figure-divider">/</div>
-              <div class="figure-item">
-                <span class="figure-label">Cap:</span>
-                <span class="figure-val font-mono">₹{{ "{:,.2f}".format(b.allocated) }}</span>
-              </div>
-              <div class="figure-pct font-mono">{{ b.percentage }}%</div>
-            </div>
-
-                        <div class="budget-bar-track">
-              <div class="budget-bar-fill {% if b.spent > b.allocated %}fill-danger{% elif b.percentage >= 80 %}fill-warning{% else %}fill-blue{% endif %}"
-                   style="width: {{ b.percentage }}%"></div>
-            </div>
-
-            <div class="budget-card-footer">
-              {% if b.remaining >= 0 %}
-                <span class="budget-remaining-text text-green">&#10003; ₹{{ "{:,.2f}".format(b.remaining) }} available under cap</span>
-              {% else %}
-                <span class="budget-remaining-text text-danger">Exceeded budget by ₹{{ "{:,.2f}".format(b.remaining|abs) }}</span>
-              {% endif %}
-            </div>
-          </div>
-        {% endfor %}
+      <div class="line-chart-container">
+        <canvas id="monthlyTrendChart"></canvas>
       </div>
-    </section>
+    </div>
+  </div>
 
-        <section class="dashboard-section">
-      <div class="section-header-row">
-        <div>
-          <h2 class="section-title">3. Financial Ledger &amp; Audited Transactions</h2>
-          <p class="section-subtitle">Real-time book of accounts with category tagging, payment reconciliation, and audit status.</p>
-        </div>
-        <button type="button" class="btn-action-primary" onclick="openModal('modal-transaction')">
-          + Record Transaction
-        </button>
+  <div class="recent-transactions-card">
+    <div class="card-header-flex">
+      <div>
+        <h3 class="card-title">Recent Transactions</h3>
+        <span class="card-caption">Latest book of accounts entries</span>
       </div>
+      <div class="header-action-links">
+        <a href="{{ url_for('expenses') }}" class="btn-subtle">View All Expenses</a>
+        <a href="{{ url_for('income') }}" class="btn-subtle">View All Inflows</a>
+        <button type="button" class="btn-sm-primary" onclick="openModal('modal-transaction')">+ New Entry</button>
+      </div>
+    </div>
 
-      <div class="ledger-table-container">
-        <table class="ledger-table">
-          <thead>
+    <div class="table-responsive">
+      <table class="fin-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description / Payee</th>
+            <th>Category</th>
+            <th>Type</th>
+            <th>Payment Mode</th>
+            <th class="text-right">Amount</th>
+            <th class="text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transactions %}
             <tr>
-              <th>Date</th>
-              <th>Payee / Financial Item</th>
-              <th>Category</th>
-              <th>Type</th>
-              <th class="text-right">Amount (₹)</th>
-              <th>Audit Status</th>
-              <th class="text-right">Action</th>
+              <td class="font-mono text-muted text-sm">{{ t.date }}</td>
+              <td>
+                <div class="cell-primary-title">{{ t.title }}</div>
+                {% if t.notes %}
+                  <div class="cell-sub-note">{{ t.notes }}</div>
+                {% endif %}
+              </td>
+              <td><span class="tag-category">{{ t.category }}</span></td>
+              <td>
+                {% if t.txn_type == 'income' %}
+                  <span class="badge-type badge-income">&#8593; Inflow</span>
+                {% else %}
+                  <span class="badge-type badge-expense">&#8595; Outflow</span>
+                {% endif %}
+              </td>
+              <td><span class="tag-mode">{{ t.payment_mode or 'UPI' }}</span></td>
+              <td class="text-right font-mono font-bold {% if t.txn_type == 'income' %}text-blue{% else %}text-dark{% endif %}">
+                {% if t.txn_type == 'income' %}+{% else %}-{% endif %}{{ format_money(t.amount) }}
+              </td>
+              <td class="text-right">
+                <form method="POST" action="{{ url_for('delete_transaction', txn_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Remove this transaction record?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                  <button type="submit" class="btn-delete-row" title="Delete record">&times;</button>
+                </form>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {% for t in transactions %}
-              <tr>
-                <td class="font-mono text-muted">{{ t.date }}</td>
-                <td>
-                  <div class="ledger-item-title">{{ t.title }}</div>
-                  {% if t.notes %}
-                    <span class="ledger-item-notes">{{ t.notes }}</span>
-                  {% endif %}
-                </td>
-                <td><span class="table-tag tag-neutral">{{ t.category }}</span></td>
-                <td>
-                  {% if t.txn_type == 'income' %}
-                    <span class="type-pill type-income">&#8593; Inflow</span>
-                  {% else %}
-                    <span class="type-pill type-expense">&#8595; Outflow</span>
-                  {% endif %}
-                </td>
-                <td class="text-right font-mono font-bold {% if t.txn_type == 'income' %}text-blue{% else %}text-dark{% endif %}">
-                  {% if t.txn_type == 'income' %}+{% else %}-{% endif %}₹{{ "{:,.2f}".format(t.amount) }}
-                </td>
-                <td>
-                  <span class="status-pill-subtle status-verified">&#10003; {{ t.status }}</span>
-                </td>
-                <td class="text-right">
-                  <form method="POST" action="{{ url_for('delete_transaction', txn_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Remove this transaction entry?');">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-                    <button type="submit" class="btn-table-delete" title="Delete record">&times;</button>
-                  </form>
-                </td>
-              </tr>
-            {% else %}
-              <tr>
-                <td colspan="7" class="text-center py-6 text-muted">No financial records found. Click "+ Record Transaction" above to create an entry.</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-  </main>
-</div>
-
-<div id="modal-transaction" class="modal-backdrop" onclick="handleBackdropClick(event, 'modal-transaction')">
-  <div class="modal-dialog">
-    <div class="modal-header">
-      <div>
-        <h3 class="modal-title">Record Financial Transaction</h3>
-        <p class="modal-subtitle">Add an income or expenditure entry in Indian Rupees (₹).</p>
-      </div>
-      <button type="button" class="modal-close" onclick="closeModal('modal-transaction')">&times;</button>
+          {% else %}
+            <tr>
+              <td colspan="7" class="empty-table-state">No transaction records found. Click "+ New Entry" above to record an inflow or expense.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-
-    <form method="POST" action="{{ url_for('add_transaction') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-      <div class="modal-body">
-        
-        <div class="field-group">
-          <label class="field-label">Transaction Type</label>
-          <div class="segmented-control">
-            <label class="segment-opt">
-              <input type="radio" name="txn_type" value="expense" checked>
-              <span class="segment-btn">Operating Outflow (Expense)</span>
-            </label>
-            <label class="segment-opt">
-              <input type="radio" name="txn_type" value="income">
-              <span class="segment-btn">Revenue / Inflow</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="field-group">
-          <label for="txn-title" class="field-label">Transaction Title / Payee</label>
-          <input type="text" id="txn-title" name="title" class="field-input" placeholder="e.g. Wholesale Inventory Restock or Client Invoice" required>
-        </div>
-
-        <div class="field-row-grid">
-          <div class="field-group">
-            <label for="txn-amount" class="field-label">Amount (<span class="currency-tag">₹ INR</span>)</label>
-            <div class="input-with-prefix">
-              <span class="input-prefix font-bold">₹</span>
-              <input type="number" step="0.01" min="0.01" id="txn-amount" name="amount" class="field-input prefix-padded font-mono" placeholder="0.00" required>
-            </div>
-          </div>
-          <div class="field-group">
-            <label for="txn-date" class="field-label">Posting Date</label>
-            <input type="date" id="txn-date" name="date" class="field-input" required>
-          </div>
-        </div>
-
-        <div class="field-group">
-          <label for="txn-category" class="field-label">Budget &amp; Reporting Category</label>
-          <input type="text" id="txn-category" name="category" class="field-input" list="category-datalist" placeholder="Select or type category" required>
-          <datalist id="category-datalist">
-            {% for b in budgets %}
-              <option value="{{ b.name }}"></option>
-            {% endfor %}
-            <option value="Direct Sales Revenue"></option>
-            <option value="Consulting Retainer"></option>
-            <option value="Storefront Lease & Utilities"></option>
-            <option value="Inventory Restock & Wholesale"></option>
-            <option value="Local Promotional Campaigns"></option>
-            <option value="Retail Staff Wages & Overtime"></option>
-          </datalist>
-          <span class="field-hint">If this matches an existing Budget Category, its spent figure will update automatically.</span>
-        </div>
-
-        <div class="field-group">
-          <label for="txn-notes" class="field-label">Audit Notes <span class="field-optional">(Optional)</span></label>
-          <input type="text" id="txn-notes" name="notes" class="field-input" placeholder="e.g. UPI / IMPS Ref #9928172 - GST Compliant">
-        </div>
-
-      </div>
-
-      <div class="modal-footer">
-        <button type="button" class="btn-secondary" onclick="closeModal('modal-transaction')">Cancel</button>
-        <button type="submit" class="btn-primary" style="width:auto; padding:0 24px;">Post Entry (₹)</button>
-      </div>
-    </form>
   </div>
+
 </div>
+{% endblock %}
 
-<div id="modal-budget" class="modal-backdrop" onclick="handleBackdropClick(event, 'modal-budget')">
-  <div class="modal-dialog">
-    <div class="modal-header">
-      <div>
-        <h3 class="modal-title">Configure Budget Category</h3>
-        <p class="modal-subtitle">Define allocated spending caps and target limits in Indian Rupees (₹).</p>
-      </div>
-      <button type="button" class="modal-close" onclick="closeModal('modal-budget')">&times;</button>
-    </div>
-
-    <form method="POST" action="{{ url_for('add_budget') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-      <div class="modal-body">
-        
-        <div class="field-group">
-          <label for="budget-name" class="field-label">Category Name</label>
-          <input type="text" id="budget-name" name="name" class="field-input" placeholder="e.g. Store Inventory Restock or Advertising" required>
-          <span class="field-hint">If this category already exists, its allocation cap will be updated.</span>
-        </div>
-
-        <div class="field-row-grid">
-          <div class="field-group">
-            <label for="budget-allocated" class="field-label">Allocated Limit (<span class="currency-tag">₹ INR</span>)</label>
-            <div class="input-with-prefix">
-              <span class="input-prefix font-bold">₹</span>
-              <input type="number" step="100" min="1.00" id="budget-allocated" name="allocated" class="field-input prefix-padded font-mono" placeholder="50000.00" required>
-            </div>
-          </div>
-          <div class="field-group">
-            <label for="budget-spent" class="field-label">Initial Spent (<span class="currency-tag">₹ INR</span>) <span class="field-optional">(Optional)</span></label>
-            <div class="input-with-prefix">
-              <span class="input-prefix font-bold">₹</span>
-              <input type="number" step="100" min="0" id="budget-spent" name="spent" class="field-input prefix-padded font-mono" placeholder="0.00">
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <div class="modal-footer">
-        <button type="button" class="btn-secondary" onclick="closeModal('modal-budget')">Cancel</button>
-        <button type="submit" class="btn-primary" style="width:auto; padding:0 24px;">Save Budget Target (₹)</button>
-      </div>
-    </form>
-  </div>
-</div>
-
+{% block scripts %}
 <script>
-  function openModal(id) {
-    var modal = document.getElementById(id);
-    if (modal) {
-      modal.classList.add('active');
-    }
-  }
-
-  function closeModal(id) {
-    var modal = document.getElementById(id);
-    if (modal) {
-      modal.classList.remove('active');
-    }
-  }
-
-  function handleBackdropClick(e, id) {
-    if (e.target.id === id) {
-      closeModal(id);
-    }
-  }
-
   document.addEventListener('DOMContentLoaded', function() {
-    var dateInput = document.getElementById('txn-date');
-    if (dateInput && !dateInput.value) {
-      var now = new Date();
-      var yyyy = now.getFullYear();
-      var mm = String(now.getMonth() + 1).padStart(2, '0');
-      var dd = String(now.getDate()).padStart(2, '0');
-      dateInput.value = yyyy + '-' + mm + '-' + dd;
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var gridColor = isDark ? '#1f2937' : '#f1f5f9';
+    var textColor = isDark ? '#94a3b8' : '#64748b';
+
+    var donutCtx = document.getElementById('expenseDonutChart');
+    if (donutCtx) {
+      var dLabels = {{ donut_labels|tojson }};
+      var dData = {{ donut_data|tojson }};
+      var dColors = {{ donut_colors|tojson }};
+
+      if (dData.length === 0) {
+        dLabels = ['No Expenses'];
+        dData = [1];
+        dColors = [isDark ? '#374151' : '#e2e8f0'];
+      }
+
+      new Chart(donutCtx, {
+        type: 'doughnut',
+        data: {
+          labels: dLabels,
+          datasets: [{
+            data: dData,
+            backgroundColor: dColors,
+            borderWidth: 2,
+            borderColor: isDark ? '#111827' : '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return ' ' + context.label + ': ' + '{{ currency_symbol }}' + Number(context.raw).toLocaleString(undefined, {minimumFractionDigits: 2});
+                }
+              }
+            }
+          },
+          cutout: '72%'
+        }
+      });
+    }
+
+    var trendCtx = document.getElementById('monthlyTrendChart');
+    if (trendCtx) {
+      var tLabels = {{ trend_labels|tojson }};
+      var tIncome = {{ trend_income|tojson }};
+      var tExpense = {{ trend_expense|tojson }};
+
+      new Chart(trendCtx, {
+        type: 'line',
+        data: {
+          labels: tLabels,
+          datasets: [
+            {
+              label: 'Inflows',
+              data: tIncome,
+              borderColor: '#1a56db',
+              backgroundColor: 'rgba(26, 86, 219, 0.08)',
+              borderWidth: 2.5,
+              fill: true,
+              tension: 0.35,
+              pointRadius: 4,
+              pointBackgroundColor: '#1a56db'
+            },
+            {
+              label: 'Expenditures',
+              data: tExpense,
+              borderColor: '#f97316',
+              backgroundColor: 'rgba(249, 115, 22, 0.08)',
+              borderWidth: 2.5,
+              fill: true,
+              tension: 0.35,
+              pointRadius: 4,
+              pointBackgroundColor: '#f97316'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: {
+              grid: { color: gridColor },
+              ticks: { color: textColor }
+            },
+            y: {
+              grid: { color: gridColor },
+              ticks: {
+                color: textColor,
+                callback: function(val) {
+                  return '{{ currency_symbol }}' + Number(val).toLocaleString();
+                }
+              }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return ' ' + context.dataset.label + ': ' + '{{ currency_symbol }}' + Number(context.raw).toLocaleString(undefined, {minimumFractionDigits: 2});
+                }
+              }
+            }
+          }
+        }
+      });
     }
   });
 </script>

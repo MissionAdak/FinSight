@@ -1,0 +1,85 @@
+{% extends "base_app.html" %}
+
+{% block title %}Spending Categories Breakdown — FinSight{% endblock %}
+
+{% block content %}
+<div class="module-page-container">
+
+  <div class="module-summary-grid">
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Cumulative Spend</span>
+        <span class="kpi-icon-pill icon-outflow">&#8595;</span>
+      </div>
+      <div class="kpi-figure text-dark font-mono">{{ format_money(total_spent) }}</div>
+      <div class="kpi-sub">
+        <span>Across {{ total_txns }} categorized transactions</span>
+      </div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Active Categories</span>
+        <span class="kpi-icon-pill icon-budget">&#9670;</span>
+      </div>
+      <div class="kpi-figure text-blue">{{ categories|length }}</div>
+      <div class="kpi-sub">
+        <span>Discrete departmental channels</span>
+      </div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Average per Category</span>
+        <span class="kpi-icon-pill icon-savings">&#8764;</span>
+      </div>
+      <div class="kpi-figure text-blue font-mono">
+        {{ format_money(total_spent / categories|length if categories|length > 0 else 0) }}
+      </div>
+      <div class="kpi-sub">
+        <span>Mean allocation weight</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-table-wrapper">
+    <div class="card-header-flex">
+      <div>
+        <h3 class="card-title">Category Spending Share</h3>
+        <span class="card-caption">Ranked by cumulative burn volume</span>
+      </div>
+    </div>
+
+    <div class="categories-list-container">
+      {% for cat in categories %}
+        <div class="category-breakdown-row">
+          <div class="cat-left-info">
+            <div class="cat-header-line">
+              <span class="cat-swatch-badge" style="background-color: {{ cat.color }};"></span>
+              <strong class="cat-name-title">{{ cat.name }}</strong>
+              <span class="cat-count-pill">{{ cat.count }} transactions</span>
+            </div>
+            <div class="cat-progress-track">
+              <div class="cat-progress-fill" style="width: {{ cat.pct }}%; background-color: {{ cat.color }};"></div>
+            </div>
+            {% if cat.modes %}
+              <div class="cat-modes-line text-xs text-muted">Modes used: {{ cat.modes }}</div>
+            {% endif %}
+          </div>
+
+          <div class="cat-right-figures">
+            <div class="cat-total-amount font-mono font-bold text-dark">{{ format_money(cat.total) }}</div>
+            <div class="cat-meta-metrics">
+              <span class="cat-pct-tag font-bold">{{ cat.pct }}%</span>
+              <span class="text-xs text-muted">• Avg: {{ format_money(cat.avg) }}</span>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="empty-table-state">No categorized expenses recorded yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

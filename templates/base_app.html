@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="app-shell">
+  <aside class="app-sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-logo-wrap">
+        <span class="logo-symbol">&#9670;</span>
+        <div class="brand-info">
+          <span class="brand-name">FinSight</span>
+          <span class="brand-tagline">Finance Management</span>
+        </div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('dashboard') }}" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>Dashboard</span>
+      </a>
+      <a href="{{ url_for('expenses') }}" class="nav-item {% if active_page == 'expenses' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>Expenses</span>
+      </a>
+      <a href="{{ url_for('budgets') }}" class="nav-item {% if active_page == 'budgets' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <span>Budgets</span>
+      </a>
+      <a href="{{ url_for('income') }}" class="nav-item {% if active_page == 'income' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>Income</span>
+      </a>
+      <a href="{{ url_for('accounts') }}" class="nav-item {% if active_page == 'accounts' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        <span>Accounts</span>
+      </a>
+      <a href="{{ url_for('categories') }}" class="nav-item {% if active_page == 'categories' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        <span>Categories</span>
+      </a>
+      <a href="{{ url_for('reports') }}" class="nav-item {% if active_page == 'reports' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Reports</span>
+      </a>
+      <a href="{{ url_for('settings') }}" class="nav-item {% if active_page == 'settings' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-bottom-widget">
+      <div class="monthly-overview-card">
+        <div class="mo-header">
+          <span class="mo-title">Monthly Overview</span>
+          <span class="mo-badge">{{ currency_code }}</span>
+        </div>
+        <div class="mo-row">
+          <span class="mo-label">Inflow:</span>
+          <span class="mo-val text-blue font-mono">{{ format_money(sidebar_summary.income) }}</span>
+        </div>
+        <div class="mo-row">
+          <span class="mo-label">Outflow:</span>
+          <span class="mo-val text-dark font-mono">{{ format_money(sidebar_summary.expense) }}</span>
+        </div>
+        <div class="mo-row">
+          <span class="mo-label">Net Savings:</span>
+          <span class="mo-val text-green font-mono">{{ format_money(sidebar_summary.savings) }}</span>
+        </div>
+        <div class="mo-budget-meter">
+          <div class="mo-meter-label">
+            <span>Budget Cap</span>
+            <span>{{ sidebar_summary.budget_pct }}%</span>
+          </div>
+          <div class="mo-meter-track">
+            <div class="mo-meter-fill {% if sidebar_summary.budget_pct >= 100 %}fill-danger{% elif sidebar_summary.budget_pct >= 80 %}fill-warning{% else %}fill-blue{% endif %}" style="width: {{ sidebar_summary.budget_pct }}%"></div>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="btn-sidebar-add" onclick="openModal('modal-transaction')">
+        <span class="btn-plus-icon">+</span> Add Transaction
+      </button>
+    </div>
+  </aside>
+
+  <div class="app-content-wrapper">
+    <header class="app-header">
+      <div class="header-left">
+        <h1 class="header-page-title">{{ page_title }}</h1>
+      </div>
+
+      <div class="header-right">
+        <a href="{{ url_for('toggle_theme') }}" class="header-icon-btn" title="Toggle Light / Dark Mode" aria-label="Toggle theme">
+          {% if user_theme == 'dark' %}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          {% else %}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          {% endif %}
+        </a>
+
+        <div class="notification-wrap">
+          <button type="button" class="header-icon-btn notification-btn" onclick="toggleNotificationDropdown()" aria-label="Notifications">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            {% if budget_alerts|length > 0 %}
+              <span class="notification-badge">{{ budget_alerts|length }}</span>
+            {% endif %}
+          </button>
+          
+          <div id="notification-dropdown" class="notification-dropdown">
+            <div class="notif-dropdown-header">
+              <span>Budget Alerts &amp; Telemetry</span>
+              <span class="notif-count-tag">{{ budget_alerts|length }} Active</span>
+            </div>
+            <div class="notif-list">
+              {% for alert in budget_alerts %}
+                <div class="notif-item {% if alert.is_over %}notif-item-danger{% else %}notif-item-warning{% endif %}">
+                  <div class="notif-title-row">
+                    <strong>{{ alert.category }}</strong>
+                    <span class="notif-pill {% if alert.is_over %}pill-danger{% else %}pill-warning{% endif %}">{{ alert.pct }}%</span>
+                  </div>
+                  <div class="notif-desc">
+                    {% if alert.is_over %}
+                      Exceeded allocated budget cap ({{ format_money(alert.spent) }} / {{ format_money(alert.allocated) }}).
+                    {% else %}
+                      Reached {{ alert.pct }}% threshold (alert cap: {{ alert.thresh }}%).
+                    {% endif %}
+                  </div>
+                </div>
+              {% else %}
+                <div class="notif-empty">
+                  No active budget threshold warnings. All categories within designated limits.
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <div class="header-profile-badge">
+          <div class="user-avatar">{{ current_user.fullname[0].upper() }}</div>
+          <div class="user-meta">
+            <span class="user-name">{{ current_user.fullname }}</span>
+            <span class="user-role-tag {{ current_user.role_badge_class }}">
+              {% if current_user.role == 'admin' %}Administrator
+              {% elif current_user.role == 'shop_owner' %}Shop Owner
+              {% else %}Standard User{% endif %}
+            </span>
+          </div>
+        </div>
+
+        <a href="{{ url_for('logout') }}" class="btn-logout" title="Sign out of FinSight">
+          Sign Out
+        </a>
+      </div>
+    </header>
+
+    <div class="app-alerts-container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">
+              <span class="alert-icon">{% if category == 'danger' %}&#33;{% else %}&#10003;{% endif %}</span>
+              <span>{{ message }}</span>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    </div>
+
+    <main class="app-main-body">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<div id="modal-transaction" class="modal-backdrop" onclick="handleBackdropClick(event, 'modal-transaction')">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div>
+        <h3 class="modal-title">Record Financial Transaction</h3>
+        <p class="modal-subtitle">Log an inflow or expenditure entry in {{ currency_code }} ({{ currency_symbol }}).</p>
+      </div>
+      <button type="button" class="modal-close" onclick="closeModal('modal-transaction')">&times;</button>
+    </div>
+
+    <form method="POST" action="{{ url_for('add_transaction') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <div class="modal-body">
+        
+        <div class="field-group">
+          <label class="field-label">Transaction Type</label>
+          <div class="segmented-control">
+            <label class="segment-opt">
+              <input type="radio" name="txn_type" value="expense" checked>
+              <span class="segment-btn">Outflow (Expense)</span>
+            </label>
+            <label class="segment-opt">
+              <input type="radio" name="txn_type" value="income">
+              <span class="segment-btn">Inflow (Revenue)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="txn-title" class="field-label">Transaction Title / Description</label>
+          <input type="text" id="txn-title" name="title" class="field-input" placeholder="e.g. Cloud Infrastructure or Client Invoicing" required>
+        </div>
+
+        <div class="field-row-grid">
+          <div class="field-group">
+            <label for="txn-amount" class="field-label">Amount (<span class="currency-tag">{{ currency_code }} {{ currency_symbol }}</span>)</label>
+            <div class="input-with-prefix">
+              <span class="input-prefix font-bold">{{ currency_symbol }}</span>
+              <input type="number" step="0.01" min="0.01" id="txn-amount" name="amount" class="field-input prefix-padded font-mono" placeholder="0.00" required>
+            </div>
+          </div>
+          <div class="field-group">
+            <label for="txn-date" class="field-label">Transaction Date</label>
+            <input type="date" id="txn-date" name="date" class="field-input" required>
+          </div>
+        </div>
+
+        <div class="field-row-grid">
+          <div class="field-group">
+            <label for="txn-category" class="field-label">Category</label>
+            <input type="text" id="txn-category" name="category" class="field-input" placeholder="e.g. Housing, Retail Sales, Groceries" required>
+          </div>
+          <div class="field-group">
+            <label for="txn-payment-mode" class="field-label">Payment Mode</label>
+            <select id="txn-payment-mode" name="payment_mode" class="field-input">
+              <option value="UPI">UPI</option>
+              <option value="Credit Card">Credit Card</option>
+              <option value="Debit Card">Debit Card</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Cash">Cash</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="txn-account" class="field-label">Associated Account / Wallet <span class="field-optional">(Optional)</span></label>
+          <select id="txn-account" name="account_id" class="field-input">
+            <option value="">-- No Account Selected --</option>
+            {% for a in current_user.accounts %}
+              <option value="{{ a.id }}">{{ a.name }} ({{ a.account_type }}) — Balance: {{ format_money(a.balance) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label for="txn-notes" class="field-label">Notes / Reference <span class="field-optional">(Optional)</span></label>
+          <input type="text" id="txn-notes" name="notes" class="field-input" placeholder="e.g. Invoice #9921 or confirmation code">
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeModal('modal-transaction')">Cancel</button>
+        <button type="submit" class="btn-primary" style="width:auto; padding:0 24px;">Post Transaction</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function openModal(id) {
+    var modal = document.getElementById(id);
+    if (modal) modal.classList.add('active');
+  }
+
+  function closeModal(id) {
+    var modal = document.getElementById(id);
+    if (modal) modal.classList.remove('active');
+  }
+
+  function handleBackdropClick(e, id) {
+    if (e.target.id === id) closeModal(id);
+  }
+
+  function toggleNotificationDropdown() {
+    var d = document.getElementById('notification-dropdown');
+    if (d) d.classList.toggle('active');
+  }
+
+  document.addEventListener('click', function(e) {
+    var notifWrap = document.querySelector('.notification-wrap');
+    if (notifWrap && !notifWrap.contains(e.target)) {
+      var d = document.getElementById('notification-dropdown');
+      if (d) d.classList.remove('active');
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var dateInput = document.getElementById('txn-date');
+    if (dateInput && !dateInput.value) {
+      var now = new Date();
+      var yyyy = now.getFullYear();
+      var mm = String(now.getMonth() + 1).padStart(2, '0');
+      var dd = String(now.getDate()).padStart(2, '0');
+      dateInput.value = yyyy + '-' + mm + '-' + dd;
+    }
+  });
+</script>
+{% endblock %}

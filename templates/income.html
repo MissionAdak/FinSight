@@ -1,0 +1,124 @@
+{% extends "base_app.html" %}
+
+{% block title %}Income &amp; Inflows — FinSight{% endblock %}
+
+{% block content %}
+<div class="module-page-container">
+
+  <div class="module-summary-grid">
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Total Inflow</span>
+        <span class="kpi-icon-pill icon-inflow">&#8593;</span>
+      </div>
+      <div class="kpi-figure text-blue font-mono">{{ format_money(total_income) }}</div>
+      <div class="kpi-sub">
+        <span>Across {{ transactions|length }} recorded revenues</span>
+      </div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Average Inflow</span>
+        <span class="kpi-icon-pill icon-budget">&#8764;</span>
+      </div>
+      <div class="kpi-figure text-blue font-mono">{{ format_money(avg_income) }}</div>
+      <div class="kpi-sub">
+        <span>Mean deposit volume</span>
+      </div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Top Income Source</span>
+        <span class="kpi-icon-pill icon-savings">&#9670;</span>
+      </div>
+      <div class="kpi-figure text-blue text-lg font-bold">{{ top_source }}</div>
+      <div class="kpi-sub">
+        <span>Largest revenue stream</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="filter-toolbar-card">
+    <form method="GET" action="{{ url_for('income') }}" class="filter-form">
+      <div class="filter-group-input">
+        <input type="text" name="q" value="{{ search }}" placeholder="Search revenue, client or notes..." class="field-input">
+      </div>
+
+      <div class="filter-group-select">
+        <select name="category" class="field-input">
+          <option value="">All Categories</option>
+          {% for c in categories %}
+            <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-group-select">
+        <select name="mode" class="field-input">
+          <option value="">All Payment Modes</option>
+          {% for m in payment_modes %}
+            <option value="{{ m }}" {% if selected_mode == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-actions">
+        <button type="submit" class="btn-primary" style="width:auto; padding:0 18px;">Apply Filter</button>
+        {% if search or selected_category or selected_mode %}
+          <a href="{{ url_for('income') }}" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">Clear</a>
+        {% endif %}
+      </div>
+    </form>
+
+    <div class="toolbar-right-action">
+      <button type="button" class="btn-action-primary" onclick="openModal('modal-transaction')">+ Log Inflow</button>
+    </div>
+  </div>
+
+  <div class="card-table-wrapper">
+    <div class="table-responsive">
+      <table class="fin-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Category</th>
+            <th>Payment Mode</th>
+            <th class="text-right">Amount</th>
+            <th class="text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transactions %}
+            <tr>
+              <td class="font-mono text-muted text-sm">{{ t.date }}</td>
+              <td>
+                <div class="cell-primary-title">{{ t.title }}</div>
+                {% if t.notes %}
+                  <div class="cell-sub-note">{{ t.notes }}</div>
+                {% endif %}
+              </td>
+              <td><span class="tag-category">{{ t.category }}</span></td>
+              <td><span class="tag-mode">{{ t.payment_mode or 'Bank Transfer' }}</span></td>
+              <td class="text-right font-mono font-bold text-blue">+{{ format_money(t.amount) }}</td>
+              <td class="text-right">
+                <form method="POST" action="{{ url_for('delete_transaction', txn_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Delete this income record?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                  <button type="submit" class="btn-delete-row" title="Delete record">&times;</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="empty-table-state">No matching revenues found for this query.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
