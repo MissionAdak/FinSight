@@ -325,10 +325,10 @@
                 </td>
                 <td class="text-center">
                   <div class="table-actions-row">
-                    <button type="button" class="action-btn action-edit" title="Edit Holding" onclick="openEditInvestmentModal({{ inv.id }}, '{{ inv.asset_name|replace("'", "\\'") }}', {{ inv.quantity }}, {{ inv.purchase_price }}, {{ inv.current_price }}, {{ inv.day_change_pct or 0.0 }}, '{{ (inv.notes or '')|replace("'", "\\'") }}')">
+                    <button type="button" class="action-btn action-edit" title="Edit Holding" data-id="{{ inv.id }}" data-name="{{ inv.asset_name }}" data-qty="{{ inv.quantity }}" data-buy="{{ inv.purchase_price }}" data-curr="{{ inv.current_price }}" data-day="{{ inv.day_change_pct or 0.0 }}" data-notes="{{ inv.notes or '' }}" onclick="openEditInvestmentModal(this)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                     </button>
-                    <form method="POST" action="{{ url_for('delete_investment', inv_id=inv.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to remove {{ inv.asset_name }} from your portfolio?');">
+                    <form method="POST" action="{{ url_for('delete_investment', inv_id=inv.id) }}" style="display:inline;" data-confirm="Are you sure you want to remove {{ inv.asset_name }} from your portfolio?" onsubmit="return confirm(this.dataset.confirm);">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                       <button type="submit" class="action-btn action-delete" title="Delete Holding">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -660,23 +660,24 @@
     var type = document.getElementById('holdingsTypeFilter').value;
     var rows = document.querySelectorAll('.holding-row');
     rows.forEach(function(row) {
-      var name = row.getAttribute('data-name');
-      var ticker = row.getAttribute('data-ticker');
-      var rowType = row.getAttribute('data-type');
-      var matchSearch = (!search || name.indexOf(search) !== -1 || ticker.indexOf(search) !== -1);
+      var name = row.dataset.name || '';
+      var ticker = row.dataset.ticker || '';
+      var rowType = row.dataset.type || '';
+      var matchSearch = (!search || name.includes(search) || ticker.includes(search));
       var matchType = (!type || rowType === type);
       row.style.display = (matchSearch && matchType) ? '' : 'none';
     });
   }
 
-  function openEditInvestmentModal(id, name, qty, buy, curr, day, notes) {
-    document.getElementById('editInvTitle').textContent = 'Update ' + name;
-    document.getElementById('editInvQty').value = qty;
-    document.getElementById('editInvBuy').value = buy;
-    document.getElementById('editInvCurr').value = curr;
-    document.getElementById('editInvDay').value = day;
-    document.getElementById('editInvNotes').value = notes;
-    document.getElementById('editInvForm').action = '/edit-investment/' + id;
+  function openEditInvestmentModal(btn) {
+    var d = btn.dataset;
+    document.getElementById('editInvTitle').textContent = 'Update ' + (d.name || '');
+    document.getElementById('editInvQty').value = d.qty || '';
+    document.getElementById('editInvBuy').value = d.buy || '';
+    document.getElementById('editInvCurr').value = d.curr || '';
+    document.getElementById('editInvDay').value = d.day || '0';
+    document.getElementById('editInvNotes').value = d.notes || '';
+    document.getElementById('editInvForm').action = '/edit-investment/' + d.id;
     openModal('modal-edit-investment');
   }
 
@@ -707,7 +708,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', function() {
-    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var isDark = document.documentElement.dataset.theme === 'dark';
     var gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
     var textColor = isDark ? '#94a3b8' : '#64748b';
 

@@ -369,10 +369,10 @@
 
   document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('[data-width]').forEach(function(el) {
-      el.style.width = el.getAttribute('data-width') + '%';
+      el.style.width = el.dataset.width + '%';
     });
     document.querySelectorAll('[data-bg]').forEach(function(el) {
-      el.style.backgroundColor = el.getAttribute('data-bg');
+      el.style.backgroundColor = el.dataset.bg;
     });
     var dateInput = document.getElementById('txn-date');
     if (dateInput && !dateInput.value) {

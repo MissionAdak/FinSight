@@ -85,8 +85,8 @@
             {% endif %}
 
             <div class="budget-card-actions">
-              <button type="button" class="btn-budget-action" onclick="openEditBudgetModal({{ b.id }}, '{{ b.name }}', {{ b.allocated }}, {{ b.spent }}, '{{ b.period }}', {{ b.alert_threshold }})">Edit</button>
-              <form method="POST" action="{{ url_for('delete_budget', budget_id=b.id) }}" style="display:inline;" onsubmit="return confirm('Remove budget category {{ b.name }}?');">
+              <button type="button" class="btn-budget-action" data-id="{{ b.id }}" data-name="{{ b.name }}" data-allocated="{{ b.allocated }}" data-spent="{{ b.spent }}" data-period="{{ b.period }}" data-threshold="{{ b.alert_threshold }}" onclick="openEditBudgetModal(this)">Edit</button>
+              <form method="POST" action="{{ url_for('delete_budget', budget_id=b.id) }}" style="display:inline;" data-confirm="Remove budget category {{ b.name }}?" onsubmit="return confirm(this.dataset.confirm);">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
                 <button type="submit" class="btn-budget-delete">&times;</button>
               </form>
@@ -136,8 +136,8 @@
             {% endif %}
 
             <div class="budget-card-actions">
-              <button type="button" class="btn-budget-action" onclick="openEditBudgetModal({{ b.id }}, '{{ b.name }}', {{ b.allocated }}, {{ b.spent }}, '{{ b.period }}', {{ b.alert_threshold }})">Edit</button>
-              <form method="POST" action="{{ url_for('delete_budget', budget_id=b.id) }}" style="display:inline;" onsubmit="return confirm('Remove budget category {{ b.name }}?');">
+              <button type="button" class="btn-budget-action" data-id="{{ b.id }}" data-name="{{ b.name }}" data-allocated="{{ b.allocated }}" data-spent="{{ b.spent }}" data-period="{{ b.period }}" data-threshold="{{ b.alert_threshold }}" onclick="openEditBudgetModal(this)">Edit</button>
+              <form method="POST" action="{{ url_for('delete_budget', budget_id=b.id) }}" style="display:inline;" data-confirm="Remove budget category {{ b.name }}?" onsubmit="return confirm(this.dataset.confirm);">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
                 <button type="submit" class="btn-budget-delete">&times;</button>
               </form>
@@ -283,14 +283,15 @@
     if (target) target.classList.add('active');
   }
 
-  function openEditBudgetModal(id, name, allocated, spent, period, threshold) {
+  function openEditBudgetModal(btn) {
+    var d = btn.dataset;
     var form = document.getElementById('form-edit-budget');
-    form.action = '/edit-budget/' + id;
-    document.getElementById('edit-b-name').value = name;
-    document.getElementById('edit-b-allocated').value = allocated;
-    document.getElementById('edit-b-spent').value = spent;
-    document.getElementById('edit-b-period').value = period;
-    document.getElementById('edit-b-threshold').value = threshold || 80;
+    form.action = '/edit-budget/' + d.id;
+    document.getElementById('edit-b-name').value = d.name || '';
+    document.getElementById('edit-b-allocated').value = d.allocated || '';
+    document.getElementById('edit-b-spent').value = d.spent || '';
+    document.getElementById('edit-b-period').value = d.period || 'Monthly';
+    document.getElementById('edit-b-threshold').value = d.threshold || 80;
     openModal('modal-edit-budget');
   }
 </script>

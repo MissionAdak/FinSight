@@ -138,16 +138,16 @@
         </div>
 
         <div class="goal-card-footer">
-          <button type="button" class="btn-sm btn-primary" onclick="openContributeModal({{ g.id }}, '{{ g.goal_name|replace("'", "\\'") }}')">
+          <button type="button" class="btn-sm btn-primary" data-id="{{ g.id }}" data-name="{{ g.goal_name }}" onclick="openContributeModal(this)">
             + Contribute
           </button>
-          <button type="button" class="btn-sm btn-secondary" onclick="openEditGoalModal({{ g.id }}, '{{ g.goal_name|replace("'", "\\'") }}', '{{ g.goal_type }}', {{ g.target_amount }}, {{ g.current_amount }}, '{{ g.target_date }}', {{ g.expected_return_rate }})">
+          <button type="button" class="btn-sm btn-secondary" data-id="{{ g.id }}" data-name="{{ g.goal_name }}" data-type="{{ g.goal_type }}" data-target="{{ g.target_amount }}" data-current="{{ g.current_amount }}" data-date="{{ g.target_date }}" data-rate="{{ g.expected_return_rate }}" onclick="openEditGoalModal(this)">
             Edit
           </button>
-          <button type="button" class="btn-sm btn-secondary" onclick="toggleHistory({{ g.id }})">
+          <button type="button" class="btn-sm btn-secondary" data-id="{{ g.id }}" onclick="toggleHistory(this)">
             History ({{ g.contributions|length }})
           </button>
-          <form method="POST" action="{{ url_for('delete_goal', goal_id=g.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete goal: {{ g.goal_name }}?');">
+          <form method="POST" action="{{ url_for('delete_goal', goal_id=g.id) }}" style="display:inline;" data-confirm="Are you sure you want to delete goal: {{ g.goal_name }}?" onsubmit="return confirm(this.dataset.confirm);">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="btn-sm btn-danger-ghost" title="Delete Goal">
               Delete
@@ -345,33 +345,35 @@
 </div>
 
 <script>
-  function openEditGoalModal(id, name, type, target, current, date, rate) {
-    document.getElementById('editGoalTitle').textContent = 'Edit ' + name;
-    document.getElementById('editGoalName').value = name;
-    document.getElementById('editGoalType').value = type;
-    document.getElementById('editGoalTarget').value = target;
-    document.getElementById('editGoalCurrent').value = current;
-    document.getElementById('editGoalDate').value = date;
-    document.getElementById('editGoalRate').value = rate;
-    document.getElementById('editGoalForm').action = '/edit-goal/' + id;
+  function openEditGoalModal(btn) {
+    var d = btn.dataset;
+    document.getElementById('editGoalTitle').textContent = 'Edit ' + (d.name || '');
+    document.getElementById('editGoalName').value = d.name || '';
+    document.getElementById('editGoalType').value = d.type || 'Other';
+    document.getElementById('editGoalTarget').value = d.target || '';
+    document.getElementById('editGoalCurrent').value = d.current || '';
+    document.getElementById('editGoalDate').value = d.date || '';
+    document.getElementById('editGoalRate').value = d.rate || '';
+    document.getElementById('editGoalForm').action = '/edit-goal/' + d.id;
     openModal('modal-edit-goal');
   }
 
-  function openContributeModal(id, name) {
-    document.getElementById('contributeModalTitle').textContent = 'Contribute to ' + name;
-    document.getElementById('contributeGoalForm').action = '/contribute-goal/' + id;
+  function openContributeModal(btn) {
+    var d = btn.dataset;
+    document.getElementById('contributeModalTitle').textContent = 'Contribute to ' + (d.name || '');
+    document.getElementById('contributeGoalForm').action = '/contribute-goal/' + d.id;
     openModal('modal-contribute-goal');
   }
 
-  function toggleHistory(id) {
-    var drawer = document.getElementById('goal-history-' + id);
+  function toggleHistory(btn) {
+    var drawer = document.getElementById('goal-history-' + btn.dataset.id);
     if (drawer) {
       drawer.style.display = (drawer.style.display === 'none' || drawer.style.display === '') ? 'block' : 'none';
     }
   }
 
   document.addEventListener('DOMContentLoaded', function() {
-    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var isDark = document.documentElement.dataset.theme === 'dark';
     var gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
     var textColor = isDark ? '#94a3b8' : '#64748b';
 

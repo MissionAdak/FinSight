@@ -212,7 +212,7 @@
 {% block scripts %}
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var isDark = document.documentElement.dataset.theme === 'dark';
     var gridColor = isDark ? '#1f2937' : '#f1f5f9';
     var textColor = isDark ? '#94a3b8' : '#64748b';
 

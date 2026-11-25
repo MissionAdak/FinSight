@@ -56,7 +56,7 @@
             <div class="account-name">{{ a.name }}</div>
             <span class="tag-acc-type tag-acc-{{ a.account_type|lower|replace(' ', '-') }}">{{ a.account_type }}</span>
           </div>
-          <form method="POST" action="{{ url_for('delete_account', account_id=a.id) }}" style="display:inline;" onsubmit="return confirm('Remove account {{ a.name }}?');">
+          <form method="POST" action="{{ url_for('delete_account', account_id=a.id) }}" style="display:inline;" data-confirm="Remove account {{ a.name }}?" onsubmit="return confirm(this.dataset.confirm);">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
             <button type="submit" class="btn-budget-delete" title="Delete account">&times;</button>
           </form>
