@@ -1,0 +1,857 @@
+{% extends "base_app.html" %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header-row">
+    <div>
+      <h2 class="page-title">Investment Portfolio &amp; Wealth Analytics</h2>
+      <p class="page-subtitle">Track multi-asset holdings, benchmark performance, and asset class distributions.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ url_for('export_investments_csv') }}" class="btn-secondary" title="Export Holdings as CSV">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export CSV</span>
+      </a>
+      <button type="button" class="btn-primary" onclick="openModal('modal-add-investment')">
+        <span class="btn-plus-icon">+</span> Add Holding
+      </button>
+    </div>
+  </div>
+
+  <div class="subnav-tabs-bar">
+    <button type="button" class="subnav-tab {% if active_tab == 'overview' %}active{% endif %}" onclick="switchInvTab('overview')">
+      Portfolio Overview
+    </button>
+    <button type="button" class="subnav-tab {% if active_tab == 'holdings' %}active{% endif %}" onclick="switchInvTab('holdings')">
+      Holdings ({{ investments|length }})
+    </button>
+    <button type="button" class="subnav-tab {% if active_tab == 'transactions' %}active{% endif %}" onclick="switchInvTab('transactions')">
+      Transactions
+    </button>
+    <button type="button" class="subnav-tab {% if active_tab == 'allocation' %}active{% endif %}" onclick="switchInvTab('allocation')">
+      Asset Allocation
+    </button>
+    <button type="button" class="subnav-tab {% if active_tab == 'performance' %}active{% endif %}" onclick="switchInvTab('performance')">
+      Performance &amp; Risk
+    </button>
+  </div>
+
+  <div id="inv-tab-overview" class="inv-tab-pane {% if active_tab == 'overview' %}active{% endif %}">
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">Total Portfolio Value</span>
+          <div class="kpi-icon-wrap icon-blue">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+        </div>
+        <div class="kpi-value font-mono">{{ format_money(total_portfolio_value) }}</div>
+        <div class="kpi-footer">
+          <span class="kpi-badge {% if overall_return >= 0 %}badge-success{% else %}badge-danger{% endif %} font-mono">
+            {% if overall_return >= 0 %}+{% endif %}{{ overall_return_pct }}% All-Time
+          </span>
+          <span class="kpi-meta font-mono">{{ currency_code }} Valued</span>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">Total Invested Capital</span>
+          <div class="kpi-icon-wrap icon-purple">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          </div>
+        </div>
+        <div class="kpi-value font-mono">{{ format_money(total_invested) }}</div>
+        <div class="kpi-footer">
+          <span class="kpi-meta">Cost Basis across {{ investments|length }} holdings</span>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">Overall Net Returns</span>
+          <div class="kpi-icon-wrap {% if overall_return >= 0 %}icon-green{% else %}icon-red{% endif %}">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          </div>
+        </div>
+        <div class="kpi-value font-mono {% if overall_return >= 0 %}text-green{% else %}text-red{% endif %}">
+          {% if overall_return >= 0 %}+{% endif %}{{ format_money(overall_return) }}
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-badge {% if overall_return >= 0 %}badge-success{% else %}badge-danger{% endif %} font-mono">
+            {% if overall_return >= 0 %}&#8599;{% else %}&#8600;{% endif %} {{ overall_return_pct }}%
+          </span>
+          <span class="kpi-meta">Unrealized Capital Gains</span>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">Today's Day Change</span>
+          <div class="kpi-icon-wrap {% if today_change_value >= 0 %}icon-green{% else %}icon-red{% endif %}">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+          </div>
+        </div>
+        <div class="kpi-value font-mono {% if today_change_value >= 0 %}text-green{% else %}text-red{% endif %}">
+          {% if today_change_value >= 0 %}+{% endif %}{{ format_money(today_change_value) }}
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-badge {% if today_change_value >= 0 %}badge-success{% else %}badge-danger{% endif %} font-mono">
+            {% if today_change_value >= 0 %}+{% endif %}{{ today_change_pct }}%
+          </span>
+          <span class="kpi-meta">Intraday Valuation Delta</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="charts-grid-two">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <h3 class="chart-title">Asset Allocation</h3>
+            <p class="chart-subtitle">Distribution across equity, funds, debt and cash</p>
+          </div>
+          <button type="button" class="btn-text-link" onclick="switchInvTab('allocation')">
+            View full allocation &rarr;
+          </button>
+        </div>
+        <div class="donut-chart-layout">
+          <div class="donut-canvas-container">
+            <canvas id="assetAllocationChart"></canvas>
+            <div class="donut-center-overlay">
+              <span class="donut-center-label">Portfolio</span>
+              <span class="donut-center-val font-mono">{{ format_money(total_portfolio_value) }}</span>
+            </div>
+          </div>
+          <div class="allocation-legend-list">
+            {% for item in allocation_breakdown %}
+              <div class="alloc-legend-row">
+                <div class="alloc-legend-left">
+                  <span class="alloc-color-dot alloc-dot-{{ loop.index0 % 7 }}"></span>
+                  <span class="alloc-name">{{ item.type }}</span>
+                </div>
+                <div class="alloc-legend-right font-mono">
+                  <span class="alloc-amount">{{ format_money(item.value) }}</span>
+                  <span class="alloc-pct">{{ item.share_pct }}%</span>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <h3 class="chart-title">Portfolio Performance vs NIFTY 50</h3>
+            <p class="chart-subtitle">Cumulative return tracking over historical intervals</p>
+          </div>
+          <div class="timeframe-pill-selector">
+            <button type="button" class="tf-btn active" data-tf="all" onclick="filterPerfChart('all', this)">All</button>
+            <button type="button" class="tf-btn" data-tf="6m" onclick="filterPerfChart('6m', this)">6M</button>
+            <button type="button" class="tf-btn" data-tf="3m" onclick="filterPerfChart('3m', this)">3M</button>
+            <button type="button" class="tf-btn" data-tf="1m" onclick="filterPerfChart('1m', this)">1M</button>
+          </div>
+        </div>
+        <div class="line-chart-container">
+          <canvas id="portfolioPerfChart"></canvas>
+        </div>
+        <div class="perf-chart-footer">
+          <div class="perf-legend-item">
+            <span class="perf-legend-line line-portfolio"></span>
+            <span>Your Portfolio: <strong>{{ overall_return_pct }}%</strong></span>
+          </div>
+          <div class="perf-legend-item">
+            <span class="perf-legend-line line-benchmark"></span>
+            <span>NIFTY 50 Benchmark: <strong>12.5%</strong></span>
+          </div>
+          <div class="perf-legend-item">
+            <span class="kpi-badge badge-success font-mono">Alpha: +{{ portfolio_alpha }}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="charts-grid-two">
+      <div class="table-card">
+        <div class="table-card-header">
+          <h3 class="table-card-title">Top Holdings</h3>
+          <button type="button" class="btn-text-link" onclick="switchInvTab('holdings')">
+            View All Holdings &rarr;
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Instrument</th>
+                <th>Type</th>
+                <th class="text-right">Current Value</th>
+                <th class="text-right">Invested</th>
+                <th class="text-right">Return</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for h in top_holdings %}
+                <tr>
+                  <td>
+                    <div class="instrument-cell">
+                      <strong class="instrument-name">{{ h.asset_name }}</strong>
+                      {% if h.ticker %}<span class="ticker-badge">{{ h.ticker }}</span>{% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <span class="tag-category tag-type-{{ h.asset_type|lower|replace(' ', '-') }}">{{ h.asset_type }}</span>
+                  </td>
+                  <td class="text-right font-mono font-bold">{{ format_money(h.current_value) }}</td>
+                  <td class="text-right font-mono text-muted">{{ format_money(h.invested_value) }}</td>
+                  <td class="text-right font-mono {% if h.return_pct >= 0 %}text-green{% else %}text-red{% endif %}">
+                    {% if h.return_pct >= 0 %}+{% endif %}{{ h.return_pct }}%
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="5" class="empty-table-state">No investment holdings registered yet.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <h3 class="table-card-title">Active Financial Goals</h3>
+          <a href="{{ url_for('goals') }}" class="btn-text-link">
+            Manage All Goals &rarr;
+          </a>
+        </div>
+        <div class="goals-overview-list">
+          {% for g in goals_summary %}
+            <div class="goal-widget-row">
+              <div class="goal-widget-top">
+                <div class="goal-widget-title-wrap">
+                  <span class="goal-type-badge type-{{ g.goal_type|lower|replace(' ', '-') }}">{{ g.goal_type }}</span>
+                  <strong class="goal-widget-name">{{ g.goal_name }}</strong>
+                </div>
+                <div class="goal-widget-status-wrap">
+                  <span class="status-pill pill-{{ g.computed_status|lower|replace(' ', '-') }}">{{ g.computed_status }}</span>
+                  <span class="goal-widget-time font-mono">{{ g.time_left_label }}</span>
+                </div>
+              </div>
+              <div class="goal-progress-wrap">
+                <div class="goal-progress-bar">
+                  <div class="goal-progress-fill {% if g.progress_pct >= 100 %}fill-blue{% elif g.computed_status == 'At Risk' %}fill-warning{% else %}fill-green{% endif %}" style="width: {{ g.progress_pct }}%"></div>
+                </div>
+                <div class="goal-progress-labels">
+                  <span class="font-mono">{{ format_money(g.current_amount) }} saved ({{ g.progress_pct }}%)</span>
+                  <span class="font-mono text-muted">Target: {{ format_money(g.target_amount) }}</span>
+                </div>
+              </div>
+            </div>
+          {% else %}
+            <div class="empty-table-state">No financial goals set. Click Manage All Goals to create your first target.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="inv-tab-holdings" class="inv-tab-pane {% if active_tab == 'holdings' %}active{% endif %}">
+    <div class="table-card">
+      <div class="ledger-filter-bar">
+        <div class="filter-group">
+          <input type="text" id="holdingsSearch" class="form-control filter-input" placeholder="Search instruments or tickers..." onkeyup="filterHoldingsTable()">
+          <select id="holdingsTypeFilter" class="form-control filter-select" onchange="filterHoldingsTable()">
+            <option value="">All Asset Classes</option>
+            <option value="Equity">Equity</option>
+            <option value="Mutual Fund">Mutual Fund</option>
+            <option value="ETF">ETF</option>
+            <option value="Debt">Debt</option>
+            <option value="Bond">Bond</option>
+            <option value="Gold">Gold</option>
+            <option value="Cash">Cash</option>
+          </select>
+        </div>
+        <div class="filter-actions">
+          <button type="button" class="btn-primary" onclick="openModal('modal-add-investment')">
+            <span class="btn-plus-icon">+</span> Add Holding
+          </button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="data-table" id="holdingsTable">
+          <thead>
+            <tr>
+              <th>Instrument</th>
+              <th>Asset Class</th>
+              <th class="text-right">Qty</th>
+              <th class="text-right">Buy Price</th>
+              <th class="text-right">Market Price</th>
+              <th class="text-right">Invested</th>
+              <th class="text-right">Current Value</th>
+              <th class="text-right">Unrealized P&amp;L</th>
+              <th class="text-right">Return</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for inv in investments %}
+              <tr class="holding-row" data-name="{{ inv.asset_name|lower }}" data-ticker="{{ (inv.ticker or '')|lower }}" data-type="{{ inv.asset_type }}">
+                <td>
+                  <div class="instrument-cell">
+                    <strong class="instrument-name">{{ inv.asset_name }}</strong>
+                    {% if inv.ticker %}<span class="ticker-badge">{{ inv.ticker }}</span>{% endif %}
+                  </div>
+                </td>
+                <td>
+                  <span class="tag-category tag-type-{{ inv.asset_type|lower|replace(' ', '-') }}">{{ inv.asset_type }}</span>
+                </td>
+                <td class="text-right font-mono">{{ inv.quantity }}</td>
+                <td class="text-right font-mono">{{ format_money(inv.purchase_price) }}</td>
+                <td class="text-right font-mono font-bold">{{ format_money(inv.current_price) }}</td>
+                <td class="text-right font-mono text-muted">{{ format_money(inv.invested_value) }}</td>
+                <td class="text-right font-mono font-bold">{{ format_money(inv.current_value) }}</td>
+                <td class="text-right font-mono {% if inv.absolute_return >= 0 %}text-green{% else %}text-red{% endif %}">
+                  {% if inv.absolute_return >= 0 %}+{% endif %}{{ format_money(inv.absolute_return) }}
+                </td>
+                <td class="text-right font-mono {% if inv.return_pct >= 0 %}text-green{% else %}text-red{% endif %}">
+                  <span class="kpi-badge {% if inv.return_pct >= 0 %}badge-success{% else %}badge-danger{% endif %} font-mono">
+                    {% if inv.return_pct >= 0 %}+{% endif %}{{ inv.return_pct }}%
+                  </span>
+                </td>
+                <td class="text-center">
+                  <div class="table-actions-row">
+                    <button type="button" class="action-btn action-edit" title="Edit Holding" onclick="openEditInvestmentModal({{ inv.id }}, '{{ inv.asset_name|replace("'", "\\'") }}', {{ inv.quantity }}, {{ inv.purchase_price }}, {{ inv.current_price }}, {{ inv.day_change_pct or 0.0 }}, '{{ (inv.notes or '')|replace("'", "\\'") }}')">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    </button>
+                    <form method="POST" action="{{ url_for('delete_investment', inv_id=inv.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to remove {{ inv.asset_name }} from your portfolio?');">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      <button type="submit" class="action-btn action-delete" title="Delete Holding">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="10" class="empty-table-state">No portfolio investments recorded yet. Click "+ Add Holding" to begin.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="inv-tab-transactions" class="inv-tab-pane {% if active_tab == 'transactions' %}active{% endif %}">
+    <div class="table-card">
+      <div class="table-card-header">
+        <h3 class="table-card-title">Investment &amp; Goal Transaction Log</h3>
+        <span class="table-card-badge">{{ txns_history|length }} Total Events</span>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Event Type</th>
+              <th>Instrument / Target</th>
+              <th>Category</th>
+              <th class="text-right">Units / Allocation</th>
+              <th class="text-right">Price</th>
+              <th class="text-right">Total Outlay</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tx in txns_history %}
+              <tr>
+                <td class="font-mono text-muted">{{ tx.date }}</td>
+                <td>
+                  <span class="kpi-badge {% if tx.type == 'Purchase' %}badge-info{% else %}badge-success{% endif %}">
+                    {{ tx.type }}
+                  </span>
+                </td>
+                <td><strong>{{ tx.instrument }}</strong></td>
+                <td><span class="tag-category">{{ tx.category }}</span></td>
+                <td class="text-right font-mono">{{ tx.quantity }}</td>
+                <td class="text-right font-mono">{{ format_money(tx.price) }}</td>
+                <td class="text-right font-mono font-bold">{{ format_money(tx.total) }}</td>
+                <td class="text-muted text-sm">{{ tx.notes }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="8" class="empty-table-state">No historical portfolio transactions logged.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="inv-tab-allocation" class="inv-tab-pane {% if active_tab == 'allocation' %}active{% endif %}">
+    <div class="table-card">
+      <div class="table-card-header">
+        <div>
+          <h3 class="table-card-title">Portfolio Allocation vs Recommended Target</h3>
+          <p class="chart-subtitle">Rebalancing telemetry based on risk-adjusted institutional asset allocations</p>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Asset Class</th>
+              <th class="text-right">Current Value</th>
+              <th class="text-right">Current Share (%)</th>
+              <th class="text-right">Target Model (%)</th>
+              <th class="text-right">Variance</th>
+              <th>Rebalancing Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in allocation_breakdown %}
+              <tr>
+                <td><strong>{{ item.type }}</strong></td>
+                <td class="text-right font-mono font-bold">{{ format_money(item.value) }}</td>
+                <td class="text-right font-mono font-bold">{{ item.share_pct }}%</td>
+                <td class="text-right font-mono text-muted">{{ item.target_pct }}%</td>
+                <td class="text-right font-mono {% if item.diff > 3 %}text-blue{% elif item.diff < -3 %}text-amber{% else %}text-green{% endif %}">
+                  {% if item.diff > 0 %}+{% endif %}{{ item.diff }}%
+                </td>
+                <td>
+                  <span class="status-pill {% if item.hint == 'Overweight' %}pill-warning{% elif item.hint == 'Underweight' %}pill-danger{% else %}pill-completed{% endif %}">
+                    {{ item.hint }}
+                  </span>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="6" class="empty-table-state">No allocation data available.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="inv-tab-performance" class="inv-tab-pane {% if active_tab == 'performance' %}active{% endif %}">
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">Portfolio Alpha</span>
+          <div class="kpi-icon-wrap icon-blue">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          </div>
+        </div>
+        <div class="kpi-value font-mono {% if portfolio_alpha >= 0 %}text-green{% else %}text-red{% endif %}">
+          {% if portfolio_alpha >= 0 %}+{% endif %}{{ portfolio_alpha }}%
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-meta">Excess return over NIFTY 50 Benchmark</span>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">Calculated Risk Profile</span>
+          <div class="kpi-icon-wrap icon-purple">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+        </div>
+        <div class="kpi-value">{{ risk_profile }}</div>
+        <div class="kpi-footer">
+          <span class="kpi-meta">Derived from equity and growth fund exposure</span>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">Top Gainer Asset</span>
+          <div class="kpi-icon-wrap icon-green">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </div>
+        </div>
+        <div class="kpi-value font-mono text-green">
+          {% if top_gainer %}+{{ top_gainer.return_pct }}%{% else %}N/A{% endif %}
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-meta">{% if top_gainer %}{{ top_gainer.asset_name }}{% else %}No holdings{% endif %}</span>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">Top Laggard Asset</span>
+          <div class="kpi-icon-wrap icon-red">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        </div>
+        <div class="kpi-value font-mono {% if top_laggard and top_laggard.return_pct < 0 %}text-red{% else %}text-muted{% endif %}">
+          {% if top_laggard %}{{ top_laggard.return_pct }}%{% else %}N/A{% endif %}
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-meta">{% if top_laggard %}{{ top_laggard.asset_name }}{% else %}No holdings{% endif %}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <h3 class="chart-title">Holdings Performance Matrix</h3>
+          <p class="chart-subtitle">Individual return % comparison across all portfolio instruments</p>
+        </div>
+      </div>
+      <div class="line-chart-container" style="height: 320px;">
+        <canvas id="holdingsBarChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="modal-add-investment" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title">Add Investment Holding</h3>
+      <button type="button" class="modal-close-btn" onclick="closeModal('modal-add-investment')">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('add_investment') }}" class="modal-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label class="form-label">Instrument Name *</label>
+            <input type="text" name="asset_name" class="form-control" placeholder="e.g. HDFC Bank, Vanguard S&P 500" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Ticker Symbol</label>
+            <input type="text" name="ticker" class="form-control" placeholder="e.g. HDFCBANK, VOO">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Asset Class *</label>
+            <select name="asset_type" class="form-control" required>
+              <option value="Equity">Equity</option>
+              <option value="Mutual Fund">Mutual Fund</option>
+              <option value="ETF">ETF</option>
+              <option value="Debt">Debt</option>
+              <option value="Bond">Bond</option>
+              <option value="Gold">Gold</option>
+              <option value="Cash">Cash</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Quantity / Units *</label>
+            <input type="number" step="any" min="0.0001" name="quantity" class="form-control" placeholder="1.0" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Avg Purchase Price ({{ currency_symbol }}) *</label>
+            <input type="number" step="any" min="0.01" name="purchase_price" class="form-control" placeholder="0.00" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Current Market Price ({{ currency_symbol }})</label>
+            <input type="number" step="any" min="0.01" name="current_price" class="form-control" placeholder="0.00">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Purchase Date *</label>
+            <input type="date" name="purchase_date" class="form-control" value="{{ today_date }}" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Today's Day Change (%)</label>
+            <input type="number" step="any" name="day_change_pct" class="form-control" placeholder="0.0">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Notes &amp; Strategy Description</label>
+          <input type="text" name="notes" class="form-control" placeholder="Optional notes, sector or broker reference">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeModal('modal-add-investment')">Cancel</button>
+        <button type="submit" class="btn-primary">Add Holding</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="modal-edit-investment" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title" id="editInvTitle">Update Market Parameters</h3>
+      <button type="button" class="modal-close-btn" onclick="closeModal('modal-edit-investment')">&times;</button>
+    </div>
+    <form id="editInvForm" method="POST" action="" class="modal-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Quantity / Units *</label>
+            <input type="number" step="any" min="0.0001" name="quantity" id="editInvQty" class="form-control" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Avg Purchase Price ({{ currency_symbol }}) *</label>
+            <input type="number" step="any" min="0.01" name="purchase_price" id="editInvBuy" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Current Market Price ({{ currency_symbol }}) *</label>
+            <input type="number" step="any" min="0.01" name="current_price" id="editInvCurr" class="form-control" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Today's Day Change (%)</label>
+            <input type="number" step="any" name="day_change_pct" id="editInvDay" class="form-control">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Notes</label>
+          <input type="text" name="notes" id="editInvNotes" class="form-control">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeModal('modal-edit-investment')">Cancel</button>
+        <button type="submit" class="btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function switchInvTab(tabName) {
+    document.querySelectorAll('.inv-tab-pane').forEach(function(pane) {
+      pane.classList.remove('active');
+    });
+    document.querySelectorAll('.subnav-tab').forEach(function(btn) {
+      btn.classList.remove('active');
+    });
+    var activePane = document.getElementById('inv-tab-' + tabName);
+    if (activePane) {
+      activePane.classList.add('active');
+    }
+    event.currentTarget.classList.add('active');
+    if (history.pushState) {
+      var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?tab=' + tabName;
+      window.history.pushState({path:newurl},'',newurl);
+    }
+  }
+
+  function filterHoldingsTable() {
+    var search = document.getElementById('holdingsSearch').value.toLowerCase();
+    var type = document.getElementById('holdingsTypeFilter').value;
+    var rows = document.querySelectorAll('.holding-row');
+    rows.forEach(function(row) {
+      var name = row.getAttribute('data-name');
+      var ticker = row.getAttribute('data-ticker');
+      var rowType = row.getAttribute('data-type');
+      var matchSearch = (!search || name.indexOf(search) !== -1 || ticker.indexOf(search) !== -1);
+      var matchType = (!type || rowType === type);
+      row.style.display = (matchSearch && matchType) ? '' : 'none';
+    });
+  }
+
+  function openEditInvestmentModal(id, name, qty, buy, curr, day, notes) {
+    document.getElementById('editInvTitle').textContent = 'Update ' + name;
+    document.getElementById('editInvQty').value = qty;
+    document.getElementById('editInvBuy').value = buy;
+    document.getElementById('editInvCurr').value = curr;
+    document.getElementById('editInvDay').value = day;
+    document.getElementById('editInvNotes').value = notes;
+    document.getElementById('editInvForm').action = '/edit-investment/' + id;
+    openModal('modal-edit-investment');
+  }
+
+  var perfLabels = {{ chart_labels|tojson }};
+  var perfPortfolio = {{ chart_portfolio_returns|tojson }};
+  var perfBenchmark = {{ chart_benchmark_returns|tojson }};
+  var perfChartInstance = null;
+
+  function filterPerfChart(range, btn) {
+    if (btn) {
+      document.querySelectorAll('.timeframe-pill-selector .tf-btn').forEach(function(b) {
+        b.classList.remove('active');
+      });
+      btn.classList.add('active');
+    }
+    if (!perfChartInstance) return;
+
+    var count = perfLabels.length;
+    var sliceCount = count;
+    if (range === '1m') sliceCount = Math.min(2, count);
+    else if (range === '3m') sliceCount = Math.min(6, count);
+    else if (range === '6m') sliceCount = Math.min(12, count);
+
+    perfChartInstance.data.labels = perfLabels.slice(count - sliceCount);
+    perfChartInstance.data.datasets[0].data = perfPortfolio.slice(count - sliceCount);
+    perfChartInstance.data.datasets[1].data = perfBenchmark.slice(count - sliceCount);
+    perfChartInstance.update();
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    var textColor = isDark ? '#94a3b8' : '#64748b';
+
+    var allocCtx = document.getElementById('assetAllocationChart');
+    if (allocCtx) {
+      var allocLabels = [{% for item in allocation_breakdown %}'{{ item.type }}',{% endfor %}];
+      var allocData = [{% for item in allocation_breakdown %}{{ item.value }},{% endfor %}];
+      var allocColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b'];
+
+      new Chart(allocCtx, {
+        type: 'doughnut',
+        data: {
+          labels: allocLabels,
+          datasets: [{
+            data: allocData,
+            backgroundColor: allocColors.slice(0, allocLabels.length),
+            borderWidth: 2,
+            borderColor: isDark ? '#1e293b' : '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '72%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  return ' ' + ctx.label + ': {{ currency_symbol }}' + ctx.parsed.toLocaleString();
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    var perfCtx = document.getElementById('portfolioPerfChart');
+    if (perfCtx) {
+      perfChartInstance = new Chart(perfCtx, {
+        type: 'line',
+        data: {
+          labels: perfLabels,
+          datasets: [
+            {
+              label: 'Portfolio Return (%)',
+              data: perfPortfolio,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.08)',
+              borderWidth: 2.5,
+              tension: 0.3,
+              fill: true,
+              pointRadius: 3,
+              pointHoverRadius: 6
+            },
+            {
+              label: 'NIFTY 50 Benchmark (%)',
+              data: perfBenchmark,
+              borderColor: '#2563eb',
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              borderDash: [5, 5],
+              tension: 0.3,
+              pointRadius: 2,
+              pointHoverRadius: 5
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  return ' ' + ctx.dataset.label + ': ' + ctx.parsed.y + '%';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: gridColor },
+              ticks: { color: textColor, maxTicksLimit: 6 }
+            },
+            y: {
+              grid: { color: gridColor },
+              ticks: {
+                color: textColor,
+                callback: function(v) { return v + '%'; }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    var barCtx = document.getElementById('holdingsBarChart');
+    if (barCtx) {
+      var barLabels = [{% for inv in investments %}'{{ inv.asset_name }}',{% endfor %}];
+      var barReturns = [{% for inv in investments %}{{ inv.return_pct }},{% endfor %}];
+      var barColors = barReturns.map(function(r) { return r >= 0 ? '#10b981' : '#ef4444'; });
+
+      new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: barLabels,
+          datasets: [{
+            label: 'Return %',
+            data: barReturns,
+            backgroundColor: barColors,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  return ' Return: ' + ctx.parsed.y + '%';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: textColor, maxRotation: 45, minRotation: 0 }
+            },
+            y: {
+              grid: { color: gridColor },
+              ticks: {
+                color: textColor,
+                callback: function(v) { return v + '%'; }
+              }
+            }
+          }
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}

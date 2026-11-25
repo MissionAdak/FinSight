@@ -1,0 +1,436 @@
+{% extends "base_app.html" %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header-row">
+    <div>
+      <h2 class="page-title">Financial Goal Planning &amp; Wealth Milestones</h2>
+      <p class="page-subtitle">Define long-term targets, simulate compound growth projections, and track savings progress.</p>
+    </div>
+    <div class="page-actions">
+      <button type="button" class="btn-primary" onclick="openModal('modal-add-goal')">
+        <span class="btn-plus-icon">+</span> Create Financial Goal
+      </button>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-title">Active Goals</span>
+        <div class="kpi-icon-wrap icon-blue">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value font-mono">{{ active_goals_count }}</div>
+      <div class="kpi-footer">
+        <span class="kpi-meta">Financial targets in progress</span>
+      </div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-title">Total Target Corpus</span>
+        <div class="kpi-icon-wrap icon-purple">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value font-mono">{{ format_money(total_target) }}</div>
+      <div class="kpi-footer">
+        <span class="kpi-meta">Cumulative future financial requirements</span>
+      </div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-title">Total Saved So Far</span>
+        <div class="kpi-icon-wrap icon-green">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value font-mono text-green">{{ format_money(total_saved) }}</div>
+      <div class="kpi-footer">
+        <span class="kpi-badge badge-success font-mono">{{ overall_progress }}% Funded</span>
+        <span class="kpi-meta">Allocated capital</span>
+      </div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-title">Overall Progress</span>
+        <div class="kpi-icon-wrap icon-amber">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value font-mono">{{ overall_progress }}%</div>
+      <div class="kpi-footer">
+        <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-1">
+          <div class="bg-blue-600 h-full rounded-full" style="width: {{ overall_progress }}%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card mb-6">
+    <div class="chart-header">
+      <div>
+        <h3 class="chart-title">Goal Projections &amp; Funding Completion</h3>
+        <p class="chart-subtitle">Direct comparison between currently accumulated capital and target corpus</p>
+      </div>
+    </div>
+    <div class="line-chart-container" style="height: 280px;">
+      <canvas id="goalsProjectionChart"></canvas>
+    </div>
+  </div>
+
+  <div class="section-header-row mb-4">
+    <h3 class="section-heading">Financial Goals Ledger</h3>
+    <span class="section-meta">{{ goals|length }} Goals Defined</span>
+  </div>
+
+  <div class="goals-grid">
+    {% for g in goals %}
+      <div class="goal-card">
+        <div class="goal-card-top">
+          <div class="goal-card-header-left">
+            <span class="goal-type-badge type-{{ g.goal_type|lower|replace(' ', '-') }}">{{ g.goal_type }}</span>
+            <h4 class="goal-card-title">{{ g.goal_name }}</h4>
+          </div>
+          <div class="goal-card-header-right">
+            <span class="status-pill pill-{{ g.computed_status|lower|replace(' ', '-') }}">{{ g.computed_status }}</span>
+          </div>
+        </div>
+
+        <div class="goal-card-body">
+          <div class="goal-amount-display">
+            <div class="amount-saved font-mono">{{ format_money(g.current_amount) }}</div>
+            <div class="amount-divider">of</div>
+            <div class="amount-target font-mono">{{ format_money(g.target_amount) }}</div>
+          </div>
+
+          <div class="goal-progress-wrap">
+            <div class="goal-progress-bar">
+              <div class="goal-progress-fill {% if g.progress_pct >= 100 %}fill-blue{% elif g.computed_status == 'At Risk' %}fill-warning{% else %}fill-green{% endif %}" style="width: {{ g.progress_pct }}%"></div>
+            </div>
+            <div class="goal-progress-labels">
+              <span class="progress-pct font-mono font-bold">{{ g.progress_pct }}% Completed</span>
+              <span class="progress-remaining font-mono text-muted">{{ format_money(g.remaining_amount) }} remaining</span>
+            </div>
+          </div>
+
+          <div class="goal-metrics-grid">
+            <div class="goal-metric-box">
+              <span class="metric-label">Target Date</span>
+              <strong class="metric-val font-mono">{{ g.target_date }}</strong>
+              <span class="metric-sub">{{ g.time_left_label }}</span>
+            </div>
+            <div class="goal-metric-box">
+              <span class="metric-label">Recommended SIP</span>
+              <strong class="metric-val font-mono text-blue">{{ format_money(g.recommended_monthly_saving) }}/mo</strong>
+              <span class="metric-sub">at {{ g.expected_return_rate }}% CAGR</span>
+            </div>
+          </div>
+
+          <div class="goal-projection-callout">
+            <span class="proj-label">Projected Corpus at Target:</span>
+            <strong class="proj-val font-mono text-green">{{ format_money(g.projected_value) }}</strong>
+          </div>
+        </div>
+
+        <div class="goal-card-footer">
+          <button type="button" class="btn-sm btn-primary" onclick="openContributeModal({{ g.id }}, '{{ g.goal_name|replace("'", "\\'") }}')">
+            + Contribute
+          </button>
+          <button type="button" class="btn-sm btn-secondary" onclick="openEditGoalModal({{ g.id }}, '{{ g.goal_name|replace("'", "\\'") }}', '{{ g.goal_type }}', {{ g.target_amount }}, {{ g.current_amount }}, '{{ g.target_date }}', {{ g.expected_return_rate }})">
+            Edit
+          </button>
+          <button type="button" class="btn-sm btn-secondary" onclick="toggleHistory({{ g.id }})">
+            History ({{ g.contributions|length }})
+          </button>
+          <form method="POST" action="{{ url_for('delete_goal', goal_id=g.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete goal: {{ g.goal_name }}?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn-sm btn-danger-ghost" title="Delete Goal">
+              Delete
+            </button>
+          </form>
+        </div>
+
+        <div id="goal-history-{{ g.id }}" class="goal-history-drawer" style="display:none;">
+          <div class="history-drawer-header">
+            <strong>Contribution Ledger</strong>
+            <span class="text-xs text-muted">{{ g.contributions|length }} entries</span>
+          </div>
+          <div class="history-drawer-list">
+            {% for c in g.contributions %}
+              <div class="history-item-row">
+                <div class="history-item-left">
+                  <span class="font-mono text-muted text-xs">{{ c.date }}</span>
+                  <span class="history-notes">{{ c.notes or 'Direct contribution' }}</span>
+                </div>
+                <div class="history-item-right font-mono font-bold text-green">
+                  +{{ format_money(c.amount) }}
+                </div>
+              </div>
+            {% else %}
+              <div class="empty-history-note">No contributions logged yet.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="empty-table-state py-8">
+        No financial goals set. Click "+ Create Financial Goal" above to start planning for milestones.
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div id="modal-add-goal" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title">Create Financial Goal</h3>
+      <button type="button" class="modal-close-btn" onclick="closeModal('modal-add-goal')">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('add_goal') }}" class="modal-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label class="form-label">Goal Title *</label>
+            <input type="text" name="goal_name" class="form-control" placeholder="e.g. Buy a Home, Retirement Corpus" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Goal Category *</label>
+            <select name="goal_type" class="form-control" required>
+              <option value="Home">Home</option>
+              <option value="Retirement">Retirement</option>
+              <option value="Travel">Travel</option>
+              <option value="Education">Education</option>
+              <option value="Emergency">Emergency</option>
+              <option value="Major Purchase">Major Purchase</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Target Corpus ({{ currency_symbol }}) *</label>
+            <input type="number" step="any" min="1" name="target_amount" class="form-control" placeholder="100000.00" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Initial Seed Amount ({{ currency_symbol }})</label>
+            <input type="number" step="any" min="0" name="current_amount" class="form-control" placeholder="0.00">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Target Completion Date *</label>
+            <input type="date" name="target_date" class="form-control" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Expected Return Rate (% CAGR)</label>
+            <input type="number" step="any" min="0" max="100" name="expected_return_rate" class="form-control" value="10.0">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeModal('modal-add-goal')">Cancel</button>
+        <button type="submit" class="btn-primary">Create Goal</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="modal-edit-goal" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title" id="editGoalTitle">Edit Financial Goal</h3>
+      <button type="button" class="modal-close-btn" onclick="closeModal('modal-edit-goal')">&times;</button>
+    </div>
+    <form id="editGoalForm" method="POST" action="" class="modal-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label class="form-label">Goal Title *</label>
+            <input type="text" name="goal_name" id="editGoalName" class="form-control" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Goal Category *</label>
+            <select name="goal_type" id="editGoalType" class="form-control" required>
+              <option value="Home">Home</option>
+              <option value="Retirement">Retirement</option>
+              <option value="Travel">Travel</option>
+              <option value="Education">Education</option>
+              <option value="Emergency">Emergency</option>
+              <option value="Major Purchase">Major Purchase</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Target Corpus ({{ currency_symbol }}) *</label>
+            <input type="number" step="any" min="1" name="target_amount" id="editGoalTarget" class="form-control" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Current Saved Amount ({{ currency_symbol }})</label>
+            <input type="number" step="any" min="0" name="current_amount" id="editGoalCurrent" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Target Completion Date *</label>
+            <input type="date" name="target_date" id="editGoalDate" class="form-control" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Expected Return Rate (% CAGR)</label>
+            <input type="number" step="any" min="0" max="100" name="expected_return_rate" id="editGoalRate" class="form-control">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeModal('modal-edit-goal')">Cancel</button>
+        <button type="submit" class="btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="modal-contribute-goal" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title" id="contributeModalTitle">Record Goal Contribution</h3>
+      <button type="button" class="modal-close-btn" onclick="closeModal('modal-contribute-goal')">&times;</button>
+    </div>
+    <form id="contributeGoalForm" method="POST" action="" class="modal-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Contribution Amount ({{ currency_symbol }}) *</label>
+          <input type="number" step="any" min="0.01" name="amount" class="form-control" placeholder="0.00" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Contribution Date *</label>
+            <input type="date" name="date" class="form-control" value="{{ today_date }}" required>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Deduct from Account (Optional)</label>
+            <select name="account_id" class="form-control">
+              <option value="">No linked account deduction</option>
+              {% for acc in accounts %}
+                <option value="{{ acc.id }}">{{ acc.name }} ({{ format_money(acc.balance) }})</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Transaction Notes</label>
+          <input type="text" name="notes" class="form-control" placeholder="e.g. Monthly automated SIP, bonus deposit">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeModal('modal-contribute-goal')">Cancel</button>
+        <button type="submit" class="btn-primary">Record Contribution</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function openEditGoalModal(id, name, type, target, current, date, rate) {
+    document.getElementById('editGoalTitle').textContent = 'Edit ' + name;
+    document.getElementById('editGoalName').value = name;
+    document.getElementById('editGoalType').value = type;
+    document.getElementById('editGoalTarget').value = target;
+    document.getElementById('editGoalCurrent').value = current;
+    document.getElementById('editGoalDate').value = date;
+    document.getElementById('editGoalRate').value = rate;
+    document.getElementById('editGoalForm').action = '/edit-goal/' + id;
+    openModal('modal-edit-goal');
+  }
+
+  function openContributeModal(id, name) {
+    document.getElementById('contributeModalTitle').textContent = 'Contribute to ' + name;
+    document.getElementById('contributeGoalForm').action = '/contribute-goal/' + id;
+    openModal('modal-contribute-goal');
+  }
+
+  function toggleHistory(id) {
+    var drawer = document.getElementById('goal-history-' + id);
+    if (drawer) {
+      drawer.style.display = (drawer.style.display === 'none' || drawer.style.display === '') ? 'block' : 'none';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    var textColor = isDark ? '#94a3b8' : '#64748b';
+
+    var chartCtx = document.getElementById('goalsProjectionChart');
+    if (chartCtx) {
+      var goalNames = {{ goal_names|tojson }};
+      var savedAmounts = {{ goal_saved_amounts|tojson }};
+      var targetAmounts = {{ goal_target_amounts|tojson }};
+
+      new Chart(chartCtx, {
+        type: 'bar',
+        data: {
+          labels: goalNames,
+          datasets: [
+            {
+              label: 'Saved So Far ({{ currency_symbol }})',
+              data: savedAmounts,
+              backgroundColor: '#10b981',
+              borderRadius: 4
+            },
+            {
+              label: 'Target Corpus ({{ currency_symbol }})',
+              data: targetAmounts,
+              backgroundColor: isDark ? '#334155' : '#e2e8f0',
+              borderRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: textColor }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  return ' ' + ctx.dataset.label + ': {{ currency_symbol }}' + ctx.parsed.y.toLocaleString();
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: textColor }
+            },
+            y: {
+              grid: { color: gridColor },
+              ticks: {
+                color: textColor,
+                callback: function(v) { return '{{ currency_symbol }}' + Number(v).toLocaleString(); }
+              }
+            }
+          }
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}

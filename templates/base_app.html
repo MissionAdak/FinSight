@@ -26,6 +26,14 @@
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         <span>Budgets</span>
       </a>
+      <a href="{{ url_for('investments') }}" class="nav-item {% if active_page == 'investments' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Investments</span>
+      </a>
+      <a href="{{ url_for('goals') }}" class="nav-item {% if active_page == 'goals' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        <span>Goals</span>
+      </a>
       <a href="{{ url_for('income') }}" class="nav-item {% if active_page == 'income' %}active{% endif %}">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
         <span>Income</span>
@@ -49,6 +57,35 @@
     </nav>
 
     <div class="sidebar-bottom-widget">
+      {% if active_page == 'investments' %}
+        <div class="market-overview-card">
+          <div class="mkt-header">
+            <span class="mkt-title">Market Pulse</span>
+            <span class="mkt-live-pill">LIVE</span>
+          </div>
+          <div class="mkt-index-item">
+            <div class="mkt-idx-left">
+              <span class="mkt-idx-name">NIFTY 50</span>
+              <span class="mkt-idx-val font-mono">24,180.50</span>
+            </div>
+            <div class="mkt-idx-right">
+              <span class="mkt-idx-chg font-mono text-green">+0.65%</span>
+              <svg width="40" height="16" viewBox="0 0 40 16" fill="none" stroke="#10b981" stroke-width="2"><polyline points="2,13 10,11 18,14 28,6 38,3"/></svg>
+            </div>
+          </div>
+          <div class="mkt-index-item">
+            <div class="mkt-idx-left">
+              <span class="mkt-idx-name">BSE SENSEX</span>
+              <span class="mkt-idx-val font-mono">79,425.80</span>
+            </div>
+            <div class="mkt-idx-right">
+              <span class="mkt-idx-chg font-mono text-green">+0.58%</span>
+              <svg width="40" height="16" viewBox="0 0 40 16" fill="none" stroke="#10b981" stroke-width="2"><polyline points="2,14 12,12 20,13 30,5 38,3"/></svg>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
       <div class="monthly-overview-card">
         <div class="mo-header">
           <span class="mo-title">Monthly Overview</span>
@@ -101,21 +138,23 @@
         <div class="notification-wrap">
           <button type="button" class="header-icon-btn notification-btn" onclick="toggleNotificationDropdown()" aria-label="Notifications">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            {% if budget_alerts|length > 0 %}
+            {% if total_notif_count and total_notif_count > 0 %}
+              <span class="notification-badge">{{ total_notif_count }}</span>
+            {% elif budget_alerts|length > 0 %}
               <span class="notification-badge">{{ budget_alerts|length }}</span>
             {% endif %}
           </button>
           
           <div id="notification-dropdown" class="notification-dropdown">
             <div class="notif-dropdown-header">
-              <span>Budget Alerts &amp; Telemetry</span>
-              <span class="notif-count-tag">{{ budget_alerts|length }} Active</span>
+              <span>Financial Alerts &amp; Telemetry</span>
+              <span class="notif-count-tag">{{ total_notif_count or budget_alerts|length }} Active</span>
             </div>
             <div class="notif-list">
               {% for alert in budget_alerts %}
                 <div class="notif-item {% if alert.is_over %}notif-item-danger{% else %}notif-item-warning{% endif %}">
                   <div class="notif-title-row">
-                    <strong>{{ alert.category }}</strong>
+                    <strong>Budget: {{ alert.category }}</strong>
                     <span class="notif-pill {% if alert.is_over %}pill-danger{% else %}pill-warning{% endif %}">{{ alert.pct }}%</span>
                   </div>
                   <div class="notif-desc">
@@ -126,11 +165,37 @@
                     {% endif %}
                   </div>
                 </div>
-              {% else %}
-                <div class="notif-empty">
-                  No active budget threshold warnings. All categories within designated limits.
+              {% endfor %}
+
+              {% for alert in investment_alerts %}
+                <div class="notif-item {% if alert.is_gain %}notif-item-success{% else %}notif-item-danger{% endif %}">
+                  <div class="notif-title-row">
+                    <strong>{{ alert.title }}</strong>
+                    <span class="notif-pill {% if alert.is_gain %}pill-completed{% else %}pill-danger{% endif %}">Market</span>
+                  </div>
+                  <div class="notif-desc">
+                    {{ alert.desc }}
+                  </div>
                 </div>
               {% endfor %}
+
+              {% for alert in goal_alerts %}
+                <div class="notif-item {% if alert.is_risk %}notif-item-warning{% else %}notif-item-success{% endif %}">
+                  <div class="notif-title-row">
+                    <strong>{{ alert.title }}</strong>
+                    <span class="notif-pill {% if alert.is_risk %}pill-warning{% else %}pill-completed{% endif %}">Goal</span>
+                  </div>
+                  <div class="notif-desc">
+                    {{ alert.desc }}
+                  </div>
+                </div>
+              {% endfor %}
+
+              {% if (not budget_alerts) and (not investment_alerts) and (not goal_alerts) %}
+                <div class="notif-empty">
+                  No active warnings or alerts. All financial modules within healthy parameters.
+                </div>
+              {% endif %}
             </div>
           </div>
         </div>

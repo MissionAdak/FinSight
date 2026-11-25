@@ -8,7 +8,7 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignat
 from flask import Flask, render_template, redirect, url_for, request, flash, session, Response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import db, User, Transaction, BudgetCategory, Account
+from models import db, User, Transaction, BudgetCategory, Account, Investment, PortfolioHistory, Goal, GoalTransaction
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'finsight-secure-production-key-2024')
@@ -103,6 +103,8 @@ def inject_global_context():
         theme = current_user.theme
 
     budget_alerts = []
+    investment_alerts = []
+    goal_alerts = []
     sidebar_summary = {
         'income': 0.0,
         'expense': 0.0,
@@ -127,6 +129,47 @@ def inject_global_context():
                     'thresh': thresh
                 })
 
+        for inv in current_user.investments:
+            if inv.return_pct >= 25.0:
+                investment_alerts.append({
+                    'title': f'{inv.asset_name} Outperforming',
+                    'desc': f'Unrealized gain of +{inv.return_pct}% on holding.',
+                    'is_gain': True
+                })
+            elif inv.return_pct <= -10.0:
+                investment_alerts.append({
+                    'title': f'{inv.asset_name} Drawdown Alert',
+                    'desc': f'Holding is down {inv.return_pct}% against purchase price.',
+                    'is_gain': False
+                })
+            elif abs(inv.day_change_pct) >= 3.0:
+                investment_alerts.append({
+                    'title': f'{inv.asset_name} Volatility',
+                    'desc': f'Intraday movement of {inv.day_change_pct:+.1f}% recorded today.',
+                    'is_gain': inv.day_change_pct > 0
+                })
+
+        for g in current_user.goals:
+            c_status = g.computed_status
+            if c_status == 'At Risk':
+                goal_alerts.append({
+                    'title': f'Goal at Risk: {g.goal_name}',
+                    'desc': f'Behind schedule. Target date {g.target_date}. Recommended: {format_money(g.recommended_monthly_saving)}/mo.',
+                    'is_risk': True
+                })
+            elif g.progress_pct >= 100.0:
+                goal_alerts.append({
+                    'title': f'Target Achieved: {g.goal_name}',
+                    'desc': f'Target corpus of {format_money(g.target_amount)} fully funded!',
+                    'is_risk': False
+                })
+            elif g.progress_pct >= 75.0 and g.progress_pct < 80.0:
+                goal_alerts.append({
+                    'title': f'Milestone Hit: {g.goal_name}',
+                    'desc': f'{g.progress_pct}% of goal corpus accumulated.',
+                    'is_risk': False
+                })
+
         now_prefix = datetime.now().strftime('%Y-%m')
         m_in = sum(t.amount for t in current_user.transactions if t.txn_type == 'income' and t.date.startswith(now_prefix))
         m_out = sum(t.amount for t in current_user.transactions if t.txn_type == 'expense' and t.date.startswith(now_prefix))
@@ -144,6 +187,8 @@ def inject_global_context():
             'spent': tot_sp
         }
 
+    total_notif_count = len(budget_alerts) + len(investment_alerts) + len(goal_alerts)
+
     return {
         'CURRENCIES': CURRENCIES,
         'COUNTRIES': COUNTRIES,
@@ -152,6 +197,9 @@ def inject_global_context():
         'format_money': format_money,
         'user_theme': theme,
         'budget_alerts': budget_alerts,
+        'investment_alerts': investment_alerts,
+        'goal_alerts': goal_alerts,
+        'total_notif_count': total_notif_count,
         'sidebar_summary': sidebar_summary,
         'csrf_token': session['csrf_token']
     }
@@ -315,6 +363,150 @@ def seed_user_financial_profile(user):
         db.session.add(t)
     db.session.commit()
 
+    seed_user_investments_and_goals(user)
+
+
+def seed_user_investments_and_goals(user):
+    if Investment.query.filter_by(user_id=user.id).first() or Goal.query.filter_by(user_id=user.id).first():
+        return
+
+    is_usd = (user.currency == 'USD')
+    if is_usd:
+        holdings_spec = [
+            ('Apple Inc.', 'AAPL', 'Equity', 25.0, 185.00, 228.50, 1.4, '2026-05-15', 'Core consumer tech holding'),
+            ('Microsoft Corp.', 'MSFT', 'Equity', 20.0, 340.00, 425.00, 0.8, '2026-06-10', 'Cloud and AI enterprise infrastructure'),
+            ('Vanguard S&P 500 ETF', 'VOO', 'ETF', 45.0, 410.00, 512.00, 0.4, '2026-04-20', 'Broad US large-cap passive index'),
+            ('Fidelity Contrafund', 'FCNTX', 'Mutual Fund', 150.0, 18.50, 24.20, -0.2, '2026-03-12', 'Active large-cap growth fund'),
+            ('US Treasury 10Y Benchmark', 'US10Y', 'Bond', 10.0, 980.00, 1025.00, 0.1, '2026-02-18', 'Fixed income sovereign capital preservation'),
+            ('SPDR Gold Shares', 'GLD', 'Gold', 30.0, 195.00, 242.00, 0.6, '2026-01-25', 'Inflation hedge and precious metal reserve'),
+            ('High-Yield Dollar Cash Reserve', 'CASH-USD', 'Cash', 1.0, 5000.00, 5000.00, 0.0, '2026-01-01', 'Emergency liquidity buffer')
+        ]
+    else:
+        holdings_spec = [
+            ('HDFC Bank Ltd.', 'HDFCBANK', 'Equity', 120.0, 1480.00, 1720.00, 1.4, '2026-05-12', 'Private sector banking anchor holding'),
+            ('Reliance Industries Ltd.', 'RELIANCE', 'Equity', 65.0, 2650.00, 2980.00, 0.9, '2026-06-05', 'Conglomerate energy retail and telecom'),
+            ('ICICI Prudential Bluechip Fund', 'ICICIBLUE', 'Mutual Fund', 1500.0, 82.50, 108.20, 0.5, '2026-03-15', 'Large-cap equity systematic SIP fund'),
+            ('SBI Balanced Advantage Fund', 'SBIBALADV', 'Mutual Fund', 2200.0, 38.00, 47.60, -0.3, '2026-04-10', 'Dynamic asset allocation balanced fund'),
+            ('Nippon India Growth Fund', 'NIPPONGROW', 'Mutual Fund', 180.0, 280.00, 365.00, 1.1, '2026-02-20', 'Mid-cap growth wealth compounder'),
+            ('HDFC Corporate Bond Debt Fund', 'HDFCCORP', 'Debt', 3500.0, 24.50, 27.80, 0.05, '2026-01-18', 'AAA-rated corporate debt fixed income'),
+            ('Sovereign Gold Bond 2026 Series', 'SGB2026', 'Gold', 25.0, 6200.00, 7650.00, 0.7, '2026-01-10', 'RBI sovereign gold bond with 2.5% coupon'),
+            ('Liquid Bank Cash Reserve', 'CASH-INR', 'Cash', 1.0, 125000.00, 125000.00, 0.0, '2026-01-01', 'Liquid short-term emergency buffer')
+        ]
+
+    for h in holdings_spec:
+        inv = Investment(
+            user_id=user.id,
+            asset_name=h[0],
+            ticker=h[1],
+            asset_type=h[2],
+            quantity=h[3],
+            purchase_price=h[4],
+            current_price=h[5],
+            day_change_pct=h[6],
+            purchase_date=h[7],
+            notes=h[8]
+        )
+        db.session.add(inv)
+    db.session.commit()
+
+    history_points = [
+        ('2026-06-01', 0.88, 0.90, 2.2, 1.8),
+        ('2026-06-15', 0.89, 0.92, 3.4, 2.6),
+        ('2026-07-01', 0.90, 0.94, 4.4, 3.5),
+        ('2026-07-15', 0.91, 0.96, 5.5, 4.1),
+        ('2026-08-01', 0.92, 0.98, 6.5, 5.2),
+        ('2026-08-15', 0.93, 1.01, 8.6, 6.0),
+        ('2026-09-01', 0.95, 1.04, 9.5, 7.3),
+        ('2026-09-15', 0.96, 1.07, 11.5, 8.1),
+        ('2026-10-01', 0.97, 1.10, 13.4, 9.2),
+        ('2026-10-15', 0.98, 1.13, 15.3, 10.4),
+        ('2026-11-01', 0.99, 1.16, 17.2, 11.8),
+        ('2026-11-15', 1.00, 1.19, 19.0, 12.5)
+    ]
+
+    total_inv = sum(i.invested_value for i in user.investments)
+    total_cur = sum(i.current_value for i in user.investments)
+
+    for hp in history_points:
+        ph = PortfolioHistory(
+            user_id=user.id,
+            date=hp[0],
+            invested_total=round(total_inv * hp[1], 2),
+            portfolio_value=round(total_cur * hp[2], 2),
+            portfolio_return_pct=hp[3],
+            benchmark_return_pct=hp[4]
+        )
+        db.session.add(ph)
+
+    if is_usd:
+        goals_spec = [
+            ('Buy a Home', 'Home', 450000.0, 145000.0, '2030-12-31', 9.5, [
+                (15000.0, '2026-09-15', 'Q3 savings transfer towards down payment'),
+                (18000.0, '2026-10-20', 'Annual performance bonus allocation'),
+                (12000.0, '2026-11-10', 'Monthly systematic goal contribution')
+            ]),
+            ('Retirement Corpus', 'Retirement', 1200000.0, 280000.0, '2045-06-30', 11.0, [
+                (8500.0, '2026-08-30', '401k IRA monthly contribution'),
+                (9200.0, '2026-09-30', 'Index SIP automated allocation'),
+                (9500.0, '2026-10-31', 'Retirement portfolio rebalancing sum')
+            ]),
+            ('Europe Family Vacation', 'Travel', 15000.0, 11200.0, '2027-08-15', 7.5, [
+                (2500.0, '2026-09-05', 'Flight tickets savings deposit'),
+                (3200.0, '2026-10-12', 'Hotel booking reserve fund')
+            ]),
+            ('Higher Education Reserve', 'Education', 120000.0, 52000.0, '2032-05-31', 10.5, [
+                (4500.0, '2026-08-14', 'College 529 plan deposit'),
+                (5000.0, '2026-10-18', 'Academic semester fund allocation')
+            ])
+        ]
+    else:
+        goals_spec = [
+            ('Buy a Dream Home', 'Home', 8500000.0, 2850000.0, '2030-12-31', 9.5, [
+                (350000.0, '2026-09-15', 'Down payment fixed deposit allocation'),
+                (450000.0, '2026-10-20', 'Diwali festive bonus contribution'),
+                (150000.0, '2026-11-10', 'Monthly systematic housing fund SIP')
+            ]),
+            ('Retirement Freedom Corpus', 'Retirement', 25000000.0, 6200000.0, '2045-06-30', 11.0, [
+                (120000.0, '2026-08-30', 'NPS and PPF annual allocation'),
+                (150000.0, '2026-09-30', 'Equity mutual fund retirement SIP'),
+                (150000.0, '2026-10-31', 'Monthly index compounder deposit')
+            ]),
+            ('Europe Family Vacation', 'Travel', 650000.0, 480000.0, '2027-08-15', 7.5, [
+                (75000.0, '2026-09-05', 'Flight booking installment savings'),
+                (95000.0, '2026-10-12', 'Hotel reservation advance fund')
+            ]),
+            ('Child Higher Education Fund', 'Education', 3500000.0, 1450000.0, '2032-05-31', 10.5, [
+                (85000.0, '2026-08-14', 'Children education hybrid fund deposit'),
+                (95000.0, '2026-10-18', 'Target maturity debt fund contribution')
+            ])
+        ]
+
+    for g in goals_spec:
+        goal = Goal(
+            user_id=user.id,
+            goal_name=g[0],
+            goal_type=g[1],
+            target_amount=g[2],
+            current_amount=g[3],
+            target_date=g[4],
+            expected_return_rate=g[5],
+            status='On Track'
+        )
+        db.session.add(goal)
+        db.session.flush()
+        goal.status = goal.computed_status
+
+        for txn in g[6]:
+            gt = GoalTransaction(
+                goal_id=goal.id,
+                amount=txn[0],
+                date=txn[1],
+                notes=txn[2]
+            )
+            db.session.add(gt)
+
+    db.session.commit()
+
 
 def init_seed_demo_accounts():
     demo_specs = [
@@ -390,6 +582,8 @@ def init_seed_demo_accounts():
             db.session.add(user)
             db.session.commit()
             seed_user_financial_profile(user)
+        else:
+            seed_user_investments_and_goals(existing)
 
 
 @app.route('/')
@@ -867,6 +1061,499 @@ def export_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment;filename={filename}"}
     )
+
+
+@app.route('/investments')
+@login_required
+def investments():
+    if not current_user.investments and not current_user.goals:
+        seed_user_investments_and_goals(current_user)
+
+    active_tab = request.args.get('tab', 'overview')
+    inv_list = Investment.query.filter_by(user_id=current_user.id).order_by(Investment.created_at.desc()).all()
+
+    total_portfolio_value = round(sum(i.current_value for i in inv_list), 2)
+    total_invested = round(sum(i.invested_value for i in inv_list), 2)
+    overall_return = round(total_portfolio_value - total_invested, 2)
+    overall_return_pct = round((overall_return / total_invested) * 100, 2) if total_invested > 0 else 0.0
+    today_change_value = round(sum(i.day_change_value for i in inv_list), 2)
+    today_change_pct = round((today_change_value / total_portfolio_value) * 100, 2) if total_portfolio_value > 0 else 0.0
+
+    allocation_map = {}
+    for i in inv_list:
+        allocation_map[i.asset_type] = allocation_map.get(i.asset_type, 0.0) + i.current_value
+
+    allocation_breakdown = []
+    target_alloc_map = {
+        'Equity': 45.0,
+        'Mutual Fund': 25.0,
+        'ETF': 10.0,
+        'Debt': 10.0,
+        'Bond': 10.0,
+        'Gold': 5.0,
+        'Cash': 5.0,
+        'Other': 5.0
+    }
+    for asset_type, val in sorted(allocation_map.items(), key=lambda x: x[1], reverse=True):
+        share_pct = round((val / total_portfolio_value) * 100, 1) if total_portfolio_value > 0 else 0.0
+        tgt_pct = target_alloc_map.get(asset_type, 10.0)
+        diff = round(share_pct - tgt_pct, 1)
+        hint = 'Overweight' if diff > 3.0 else ('Underweight' if diff < -3.0 else 'Balanced')
+        allocation_breakdown.append({
+            'type': asset_type,
+            'value': round(val, 2),
+            'share_pct': share_pct,
+            'target_pct': tgt_pct,
+            'diff': diff,
+            'hint': hint
+        })
+
+    history_records = PortfolioHistory.query.filter_by(user_id=current_user.id).order_by(PortfolioHistory.date.asc()).all()
+    if not history_records:
+        history_records = [
+            PortfolioHistory(
+                user_id=current_user.id,
+                date=datetime.now().strftime('%Y-%m-%d'),
+                invested_total=total_invested,
+                portfolio_value=total_portfolio_value,
+                portfolio_return_pct=overall_return_pct,
+                benchmark_return_pct=12.5
+            )
+        ]
+
+    chart_labels = [h.date for h in history_records]
+    chart_portfolio_returns = [h.portfolio_return_pct for h in history_records]
+    chart_benchmark_returns = [h.benchmark_return_pct for h in history_records]
+    chart_values = [h.portfolio_value for h in history_records]
+
+    top_holdings = sorted(inv_list, key=lambda x: x.current_value, reverse=True)[:5]
+    user_goals = Goal.query.filter_by(user_id=current_user.id).order_by(Goal.target_date.asc()).limit(4).all()
+
+    equity_and_mf_pct = sum(item['share_pct'] for item in allocation_breakdown if item['type'] in ['Equity', 'Mutual Fund', 'ETF'])
+    if equity_and_mf_pct >= 65.0:
+        risk_profile = 'Aggressive'
+    elif equity_and_mf_pct >= 35.0:
+        risk_profile = 'Moderate'
+    else:
+        risk_profile = 'Conservative'
+
+    latest_bench = chart_benchmark_returns[-1] if chart_benchmark_returns else 12.0
+    portfolio_alpha = round(overall_return_pct - latest_bench, 2)
+    top_gainer = max(inv_list, key=lambda x: x.return_pct) if inv_list else None
+    top_laggard = min(inv_list, key=lambda x: x.return_pct) if inv_list else None
+
+    txns_history = []
+    for inv in inv_list:
+        txns_history.append({
+            'date': inv.purchase_date,
+            'type': 'Purchase',
+            'instrument': inv.asset_name,
+            'category': inv.asset_type,
+            'quantity': inv.quantity,
+            'price': inv.purchase_price,
+            'total': inv.invested_value,
+            'notes': inv.notes or 'Initial portfolio asset acquisition'
+        })
+    for g in Goal.query.filter_by(user_id=current_user.id).all():
+        for ct in g.contributions:
+            txns_history.append({
+                'date': ct.date,
+                'type': 'Goal Contribution',
+                'instrument': g.goal_name,
+                'category': f"Goal: {g.goal_type}",
+                'quantity': 1.0,
+                'price': ct.amount,
+                'total': ct.amount,
+                'notes': ct.notes or f"Contribution to {g.goal_name}"
+            })
+    txns_history.sort(key=lambda x: x['date'], reverse=True)
+
+    return render_template(
+        'investments.html',
+        page_title='Investment Portfolio',
+        active_page='investments',
+        active_tab=active_tab,
+        investments=inv_list,
+        total_portfolio_value=total_portfolio_value,
+        total_invested=total_invested,
+        overall_return=overall_return,
+        overall_return_pct=overall_return_pct,
+        today_change_value=today_change_value,
+        today_change_pct=today_change_pct,
+        allocation_breakdown=allocation_breakdown,
+        top_holdings=top_holdings,
+        goals_summary=user_goals,
+        chart_labels=chart_labels,
+        chart_portfolio_returns=chart_portfolio_returns,
+        chart_benchmark_returns=chart_benchmark_returns,
+        chart_values=chart_values,
+        risk_profile=risk_profile,
+        portfolio_alpha=portfolio_alpha,
+        top_gainer=top_gainer,
+        top_laggard=top_laggard,
+        txns_history=txns_history
+    )
+
+
+@app.route('/add-investment', methods=['POST'])
+@login_required
+def add_investment():
+    asset_name = request.form.get('asset_name', '').strip()
+    ticker = request.form.get('ticker', '').strip().upper()
+    asset_type = request.form.get('asset_type', 'Equity').strip()
+    qty_str = request.form.get('quantity', '1').strip()
+    buy_str = request.form.get('purchase_price', '0').strip()
+    curr_str = request.form.get('current_price', '0').strip()
+    day_str = request.form.get('day_change_pct', '0').strip()
+    p_date = request.form.get('purchase_date', datetime.now().strftime('%Y-%m-%d')).strip()
+    notes = request.form.get('notes', '').strip()
+
+    try:
+        qty = float(qty_str)
+        buy_price = float(buy_str)
+        curr_price = float(curr_str) if curr_str else buy_price
+        day_pct = float(day_str) if day_str else 0.0
+
+        if not asset_name:
+            flash('Instrument name is required.', 'danger')
+            return redirect(url_for('investments', tab='holdings'))
+        if qty <= 0 or buy_price <= 0:
+            flash('Quantity and purchase price must be positive numbers.', 'danger')
+            return redirect(url_for('investments', tab='holdings'))
+
+        inv = Investment(
+            user_id=current_user.id,
+            asset_name=asset_name,
+            ticker=ticker if ticker else None,
+            asset_type=asset_type,
+            quantity=qty,
+            purchase_price=buy_price,
+            current_price=curr_price,
+            day_change_pct=day_pct,
+            purchase_date=p_date,
+            notes=notes if notes else None
+        )
+        db.session.add(inv)
+        db.session.commit()
+
+        all_inv = Investment.query.filter_by(user_id=current_user.id).all()
+        tot_val = sum(i.current_value for i in all_inv)
+        tot_inv = sum(i.invested_value for i in all_inv)
+        ret_pct = round(((tot_val - tot_inv) / tot_inv) * 100, 2) if tot_inv > 0 else 0.0
+        ph = PortfolioHistory(
+            user_id=current_user.id,
+            investment_id=inv.id,
+            date=datetime.now().strftime('%Y-%m-%d'),
+            invested_total=tot_inv,
+            portfolio_value=tot_val,
+            portfolio_return_pct=ret_pct,
+            benchmark_return_pct=12.5
+        )
+        db.session.add(ph)
+        db.session.commit()
+
+        flash(f'Investment holding {asset_name} added to portfolio successfully!', 'success')
+    except ValueError:
+        flash('Please enter valid numeric figures for financial fields.', 'danger')
+
+    return redirect(url_for('investments', tab='holdings'))
+
+
+@app.route('/edit-investment/<int:inv_id>', methods=['POST'])
+@login_required
+def edit_investment(inv_id):
+    inv = db.session.get(Investment, inv_id)
+    if not inv or inv.user_id != current_user.id:
+        flash('Investment holding not found or unauthorized access.', 'danger')
+        return redirect(url_for('investments', tab='holdings'))
+
+    qty_str = request.form.get('quantity', str(inv.quantity)).strip()
+    buy_str = request.form.get('purchase_price', str(inv.purchase_price)).strip()
+    curr_str = request.form.get('current_price', str(inv.current_price)).strip()
+    day_str = request.form.get('day_change_pct', str(inv.day_change_pct or 0.0)).strip()
+    notes = request.form.get('notes', inv.notes or '').strip()
+
+    try:
+        inv.quantity = float(qty_str)
+        inv.purchase_price = float(buy_str)
+        inv.current_price = float(curr_str)
+        inv.day_change_pct = float(day_str)
+        inv.notes = notes if notes else None
+        db.session.commit()
+
+        all_inv = Investment.query.filter_by(user_id=current_user.id).all()
+        tot_val = sum(i.current_value for i in all_inv)
+        tot_inv = sum(i.invested_value for i in all_inv)
+        ret_pct = round(((tot_val - tot_inv) / tot_inv) * 100, 2) if tot_inv > 0 else 0.0
+        ph = PortfolioHistory(
+            user_id=current_user.id,
+            investment_id=inv.id,
+            date=datetime.now().strftime('%Y-%m-%d'),
+            invested_total=tot_inv,
+            portfolio_value=tot_val,
+            portfolio_return_pct=ret_pct,
+            benchmark_return_pct=12.5
+        )
+        db.session.add(ph)
+        db.session.commit()
+
+        flash(f'Holding {inv.asset_name} market parameters updated successfully!', 'success')
+    except ValueError:
+        flash('Please enter valid numeric figures for financial fields.', 'danger')
+
+    return redirect(url_for('investments', tab='holdings'))
+
+
+@app.route('/delete-investment/<int:inv_id>', methods=['POST'])
+@login_required
+def delete_investment(inv_id):
+    inv = db.session.get(Investment, inv_id)
+    if not inv or inv.user_id != current_user.id:
+        flash('Investment holding not found or unauthorized access.', 'danger')
+        return redirect(url_for('investments', tab='holdings'))
+
+    name = inv.asset_name
+    db.session.delete(inv)
+    db.session.commit()
+    flash(f'Holding {name} removed from your portfolio.', 'success')
+    return redirect(url_for('investments', tab='holdings'))
+
+
+@app.route('/export/investments-csv')
+@login_required
+def export_investments_csv():
+    holdings = Investment.query.filter_by(user_id=current_user.id).order_by(Investment.asset_type.asc(), Investment.asset_name.asc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        'Instrument', 'Ticker', 'Asset Type', 'Quantity', 'Avg Purchase Price',
+        'Current Price', 'Invested Value', 'Current Value', 'Absolute Return',
+        'Return %', 'Day Change %', 'Purchase Date', 'Notes'
+    ])
+
+    for h in holdings:
+        writer.writerow([
+            h.asset_name,
+            h.ticker or '',
+            h.asset_type,
+            h.quantity,
+            h.purchase_price,
+            h.current_price,
+            h.invested_value,
+            h.current_value,
+            h.absolute_return,
+            f"{h.return_pct}%",
+            f"{h.day_change_pct}%",
+            h.purchase_date,
+            h.notes or ''
+        ])
+
+    output.seek(0)
+    filename = f"FinSight_Holdings_{current_user.fullname.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.csv"
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment;filename={filename}"}
+    )
+
+
+@app.route('/goals')
+@login_required
+def goals():
+    if not current_user.goals and not current_user.investments:
+        seed_user_investments_and_goals(current_user)
+
+    user_goals = Goal.query.filter_by(user_id=current_user.id).order_by(Goal.target_date.asc()).all()
+    for g in user_goals:
+        new_status = g.computed_status
+        if g.status != new_status:
+            g.status = new_status
+    db.session.commit()
+
+    active_goals_count = len(user_goals)
+    total_target = round(sum(g.target_amount for g in user_goals), 2)
+    total_saved = round(sum(g.current_amount for g in user_goals), 2)
+    overall_progress = round((total_saved / total_target) * 100, 1) if total_target > 0 else 0.0
+
+    user_accounts = Account.query.filter_by(user_id=current_user.id).order_by(Account.name.asc()).all()
+    goal_names = [g.goal_name for g in user_goals]
+    goal_saved_amounts = [g.current_amount for g in user_goals]
+    goal_target_amounts = [g.target_amount for g in user_goals]
+
+    return render_template(
+        'goals.html',
+        page_title='Financial Goal Planning',
+        active_page='goals',
+        goals=user_goals,
+        active_goals_count=active_goals_count,
+        total_target=total_target,
+        total_saved=total_saved,
+        overall_progress=overall_progress,
+        accounts=user_accounts,
+        goal_names=goal_names,
+        goal_saved_amounts=goal_saved_amounts,
+        goal_target_amounts=goal_target_amounts
+    )
+
+
+@app.route('/add-goal', methods=['POST'])
+@login_required
+def add_goal():
+    goal_name = request.form.get('goal_name', '').strip()
+    goal_type = request.form.get('goal_type', 'Other').strip()
+    target_str = request.form.get('target_amount', '0').strip()
+    curr_str = request.form.get('current_amount', '0').strip()
+    target_date = request.form.get('target_date', '').strip()
+    return_str = request.form.get('expected_return_rate', '10.0').strip()
+
+    try:
+        target_amount = float(target_str)
+        current_amount = float(curr_str) if curr_str else 0.0
+        expected_return_rate = float(return_str) if return_str else 10.0
+
+        if not goal_name:
+            flash('Goal name is required.', 'danger')
+            return redirect(url_for('goals'))
+        if target_amount <= 0:
+            flash('Target corpus amount must be positive.', 'danger')
+            return redirect(url_for('goals'))
+        if not target_date:
+            flash('Target completion date is required.', 'danger')
+            return redirect(url_for('goals'))
+
+        g = Goal(
+            user_id=current_user.id,
+            goal_name=goal_name,
+            goal_type=goal_type,
+            target_amount=target_amount,
+            current_amount=current_amount,
+            target_date=target_date,
+            expected_return_rate=expected_return_rate,
+            status='On Track'
+        )
+        db.session.add(g)
+        db.session.flush()
+        g.status = g.computed_status
+
+        if current_amount > 0:
+            gt = GoalTransaction(
+                goal_id=g.id,
+                amount=current_amount,
+                date=datetime.now().strftime('%Y-%m-%d'),
+                notes='Initial seed fund balance'
+            )
+            db.session.add(gt)
+
+        db.session.commit()
+        flash(f'Financial goal "{goal_name}" created with target projection tracking.', 'success')
+    except ValueError:
+        flash('Please enter valid numeric figures for financial targets.', 'danger')
+
+    return redirect(url_for('goals'))
+
+
+@app.route('/edit-goal/<int:goal_id>', methods=['POST'])
+@login_required
+def edit_goal(goal_id):
+    goal = db.session.get(Goal, goal_id)
+    if not goal or goal.user_id != current_user.id:
+        flash('Financial goal not found or unauthorized access.', 'danger')
+        return redirect(url_for('goals'))
+
+    goal_name = request.form.get('goal_name', goal.goal_name).strip()
+    goal_type = request.form.get('goal_type', goal.goal_type).strip()
+    target_str = request.form.get('target_amount', str(goal.target_amount)).strip()
+    curr_str = request.form.get('current_amount', str(goal.current_amount)).strip()
+    target_date = request.form.get('target_date', goal.target_date).strip()
+    return_str = request.form.get('expected_return_rate', str(goal.expected_return_rate)).strip()
+
+    try:
+        goal.goal_name = goal_name
+        goal.goal_type = goal_type
+        goal.target_amount = float(target_str)
+        goal.current_amount = float(curr_str)
+        goal.target_date = target_date
+        goal.expected_return_rate = float(return_str)
+        goal.status = goal.computed_status
+        db.session.commit()
+        flash(f'Goal "{goal.goal_name}" settings updated successfully.', 'success')
+    except ValueError:
+        flash('Please enter valid numeric values for goal targets.', 'danger')
+
+    return redirect(url_for('goals'))
+
+
+@app.route('/contribute-goal/<int:goal_id>', methods=['POST'])
+@login_required
+def contribute_goal(goal_id):
+    goal = db.session.get(Goal, goal_id)
+    if not goal or goal.user_id != current_user.id:
+        flash('Financial goal not found or unauthorized access.', 'danger')
+        return redirect(url_for('goals'))
+
+    amount_str = request.form.get('amount', '0').strip()
+    date_val = request.form.get('date', datetime.now().strftime('%Y-%m-%d')).strip()
+    notes = request.form.get('notes', '').strip()
+    account_id_str = request.form.get('account_id', '').strip()
+
+    try:
+        amount = float(amount_str)
+        if amount <= 0:
+            flash('Contribution amount must be greater than zero.', 'danger')
+            return redirect(url_for('goals'))
+
+        goal.current_amount = round(goal.current_amount + amount, 2)
+        goal.status = goal.computed_status
+
+        gt = GoalTransaction(
+            goal_id=goal.id,
+            amount=amount,
+            date=date_val,
+            notes=notes or f"Contribution to {goal.goal_name}"
+        )
+        db.session.add(gt)
+
+        if account_id_str:
+            acc = db.session.get(Account, int(account_id_str))
+            if acc and acc.user_id == current_user.id:
+                acc.balance = round(acc.balance - amount, 2)
+                txn = Transaction(
+                    user_id=current_user.id,
+                    account_id=acc.id,
+                    title=f"Goal Contribution: {goal.goal_name}",
+                    category='Savings & Goals',
+                    amount=amount,
+                    txn_type='expense',
+                    payment_mode='Bank Transfer',
+                    date=date_val,
+                    status='Completed',
+                    notes=notes or f"Fund transfer to {goal.goal_name}"
+                )
+                db.session.add(txn)
+                gt.transaction_id = txn.id
+
+        db.session.commit()
+        flash(f'Added {format_money(amount)} contribution to {goal.goal_name} successfully!', 'success')
+    except ValueError:
+        flash('Please enter a valid numeric contribution amount.', 'danger')
+
+    return redirect(url_for('goals'))
+
+
+@app.route('/delete-goal/<int:goal_id>', methods=['POST'])
+@login_required
+def delete_goal(goal_id):
+    goal = db.session.get(Goal, goal_id)
+    if not goal or goal.user_id != current_user.id:
+        flash('Financial goal not found or unauthorized access.', 'danger')
+        return redirect(url_for('goals'))
+
+    name = goal.goal_name
+    db.session.delete(goal)
+    db.session.commit()
+    flash(f'Financial goal "{name}" deleted successfully.', 'success')
+    return redirect(url_for('goals'))
 
 
 @app.route('/settings')
