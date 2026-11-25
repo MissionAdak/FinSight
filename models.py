@@ -1,10 +1,23 @@
 from datetime import datetime, timezone
+from typing import Any
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 
 db = SQLAlchemy()
 
-class User(UserMixin, db.Model):
+
+class BaseModel(db.Model):
+    __abstract__ = True
+
+    def __init__(self, **kwargs: Any) -> None:
+        cls_ = type(self)
+        for key, value in kwargs.items():
+            if not hasattr(cls_, key):
+                raise TypeError(f'{key!r} is an invalid keyword argument for {cls_.__name__}')
+            setattr(self, key, value)
+
+
+class User(UserMixin, BaseModel):
     __tablename__ = 'users'
 
     id                    = db.Column(db.Integer, primary_key=True)
@@ -64,7 +77,7 @@ class User(UserMixin, db.Model):
         return f'<User {self.email} ({self.role})>'
 
 
-class Account(db.Model):
+class Account(BaseModel):
     __tablename__ = 'accounts'
 
     id           = db.Column(db.Integer, primary_key=True)
@@ -79,7 +92,7 @@ class Account(db.Model):
         return f'<Account {self.name} ({self.account_type}): {self.balance}>'
 
 
-class Transaction(db.Model):
+class Transaction(BaseModel):
     __tablename__ = 'transactions'
 
     id           = db.Column(db.Integer, primary_key=True)
@@ -98,7 +111,7 @@ class Transaction(db.Model):
         return f'<Transaction {self.title} {self.amount}>'
 
 
-class BudgetCategory(db.Model):
+class BudgetCategory(BaseModel):
     __tablename__ = 'budget_categories'
 
     id              = db.Column(db.Integer, primary_key=True)
@@ -146,7 +159,7 @@ class BudgetCategory(db.Model):
         return f'<BudgetCategory {self.name}: {self.spent}/{self.allocated}>'
 
 
-class Investment(db.Model):
+class Investment(BaseModel):
     __tablename__ = 'investments'
 
     id             = db.Column(db.Integer, primary_key=True)
@@ -185,13 +198,13 @@ class Investment(db.Model):
 
     @property
     def day_change_value(self):
-        return round(self.current_value * (self.day_change_pct / 100.0), 2)
+        return round(self.current_value * ((self.day_change_pct or 0.0) / 100.0), 2)
 
     def __repr__(self):
         return f'<Investment {self.asset_name} ({self.asset_type}): {self.current_value}>'
 
 
-class PortfolioHistory(db.Model):
+class PortfolioHistory(BaseModel):
     __tablename__ = 'portfolio_history'
 
     id                   = db.Column(db.Integer, primary_key=True)
@@ -208,7 +221,7 @@ class PortfolioHistory(db.Model):
         return f'<PortfolioHistory {self.date}: Val {self.portfolio_value}>'
 
 
-class Goal(db.Model):
+class Goal(BaseModel):
     __tablename__ = 'goals'
 
     id                   = db.Column(db.Integer, primary_key=True)
@@ -227,13 +240,17 @@ class Goal(db.Model):
 
     @property
     def progress_pct(self):
-        if self.target_amount > 0:
-            return min(round((self.current_amount / self.target_amount) * 100, 1), 100.0)
+        curr = self.current_amount or 0.0
+        tgt = self.target_amount or 0.0
+        if tgt > 0:
+            return min(round((curr / tgt) * 100, 1), 100.0)
         return 0.0
 
     @property
     def remaining_amount(self):
-        return max(round(self.target_amount - self.current_amount, 2), 0.0)
+        curr = self.current_amount or 0.0
+        tgt = self.target_amount or 0.0
+        return max(round(tgt - curr, 2), 0.0)
 
     @property
     def months_remaining(self):
@@ -247,7 +264,7 @@ class Goal(db.Model):
 
     @property
     def time_left_label(self):
-        if self.current_amount >= self.target_amount:
+        if (self.current_amount or 0.0) >= (self.target_amount or 0.0):
             return 'Target Reached'
         m = self.months_remaining
         if m >= 12:
@@ -257,7 +274,7 @@ class Goal(db.Model):
 
     @property
     def recommended_monthly_saving(self):
-        if self.current_amount >= self.target_amount:
+        if (self.current_amount or 0.0) >= (self.target_amount or 0.0):
             return 0.0
         m = self.months_remaining
         r = (self.expected_return_rate or 10.0) / 100.0 / 12.0
@@ -276,17 +293,18 @@ class Goal(db.Model):
         m = self.months_remaining
         r = (self.expected_return_rate or 10.0) / 100.0 / 12.0
         pmt = self.recommended_monthly_saving
+        curr = self.current_amount or 0.0
         try:
-            pv = self.current_amount * ((1 + r) ** m)
+            pv = curr * ((1 + r) ** m)
             if r > 0 and pmt > 0:
                 pv += pmt * (((1 + r) ** m - 1) / r)
             return round(pv, 2)
         except Exception:
-            return round(self.target_amount, 2)
+            return round(self.target_amount or 0.0, 2)
 
     @property
     def computed_status(self):
-        if self.current_amount >= self.target_amount:
+        if (self.current_amount or 0.0) >= (self.target_amount or 0.0):
             return 'Completed'
         try:
             t_date = datetime.strptime(self.target_date, '%Y-%m-%d').date()
@@ -308,7 +326,7 @@ class Goal(db.Model):
         return f'<Goal {self.goal_name}: {self.current_amount}/{self.target_amount}>'
 
 
-class GoalTransaction(db.Model):
+class GoalTransaction(BaseModel):
     __tablename__ = 'goal_transactions'
 
     id             = db.Column(db.Integer, primary_key=True)

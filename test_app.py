@@ -24,7 +24,9 @@ def test_fintech_platform():
     with app.test_client() as client:
         resp = client.get('/login')
         assert resp.status_code == 200
-        csrf_token = re.search(r'name="csrf_token"\s+value="([^"]+)"', resp.get_data(as_text=True)).group(1)
+        match = re.search(r'name="csrf_token"\s+value="([^"]+)"', resp.get_data(as_text=True))
+        assert match is not None
+        csrf_token = match.group(1)
 
         login_resp = client.post('/login', data={
             'csrf_token': csrf_token,

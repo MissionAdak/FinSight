@@ -703,7 +703,7 @@ def expenses():
         cat_counts = {}
         for t in all_expenses:
             cat_counts[t.category] = cat_counts.get(t.category, 0.0) + t.amount
-        top_cat = max(cat_counts, key=cat_counts.get)
+        top_cat = max(cat_counts, key=lambda k: cat_counts[k])
 
     accounts = Account.query.filter_by(user_id=current_user.id).all()
 
@@ -754,7 +754,7 @@ def income():
         cat_counts = {}
         for t in all_incomes:
             cat_counts[t.category] = cat_counts.get(t.category, 0.0) + t.amount
-        top_source = max(cat_counts, key=cat_counts.get)
+        top_source = max(cat_counts, key=lambda k: cat_counts[k])
 
     accounts = Account.query.filter_by(user_id=current_user.id).all()
 
@@ -1191,7 +1191,8 @@ def investments():
         portfolio_alpha=portfolio_alpha,
         top_gainer=top_gainer,
         top_laggard=top_laggard,
-        txns_history=txns_history
+        txns_history=txns_history,
+        today_date=datetime.now().strftime('%Y-%m-%d')
     )
 
 
@@ -1393,7 +1394,8 @@ def goals():
         accounts=user_accounts,
         goal_names=goal_names,
         goal_saved_amounts=goal_saved_amounts,
-        goal_target_amounts=goal_target_amounts
+        goal_target_amounts=goal_target_amounts,
+        today_date=datetime.now().strftime('%Y-%m-%d')
     )
 
 
@@ -1531,6 +1533,7 @@ def contribute_goal(goal_id):
                     notes=notes or f"Fund transfer to {goal.goal_name}"
                 )
                 db.session.add(txn)
+                db.session.flush()
                 gt.transaction_id = txn.id
 
         db.session.commit()
@@ -1813,7 +1816,7 @@ def register():
                     error = 'Please enter a valid 10-digit Indian phone number starting with 6, 7, 8, or 9.'
                 else:
                     error = 'Please enter a valid international phone number (7 to 15 digits).'
-            else:
+            elif formatted_phone is not None:
                 phone = formatted_phone
 
         if not error:
