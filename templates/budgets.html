@@ -74,7 +74,7 @@
           </div>
 
           <div class="budget-bar-track">
-            <div class="budget-bar-fill {% if b.spent > b.allocated %}fill-danger{% elif b.percentage >= b.alert_threshold %}fill-warning{% else %}fill-blue{% endif %}" style="width: {{ [b.percentage, 100]|min }}%;"></div>
+            <div class="budget-bar-fill {% if b.spent > b.allocated %}fill-danger{% elif b.percentage >= b.alert_threshold %}fill-warning{% else %}fill-blue{% endif %}" data-width="{{ [b.percentage, 100]|min }}"></div>
           </div>
 
           <div class="budget-card-footer">
@@ -125,7 +125,7 @@
           </div>
 
           <div class="budget-bar-track">
-            <div class="budget-bar-fill {% if b.spent > b.allocated %}fill-danger{% elif b.percentage >= b.alert_threshold %}fill-warning{% else %}fill-blue{% endif %}" style="width: {{ [b.percentage, 100]|min }}%;"></div>
+            <div class="budget-bar-fill {% if b.spent > b.allocated %}fill-danger{% elif b.percentage >= b.alert_threshold %}fill-warning{% else %}fill-blue{% endif %}" data-width="{{ [b.percentage, 100]|min }}"></div>
           </div>
 
           <div class="budget-card-footer">
@@ -152,7 +152,7 @@
 
 </div>
 
-<div id="modal-add-budget" class="modal-backdrop" onclick="handleBackdropClick(event, 'modal-add-budget')">
+<div id="modal-add-budget" class="modal-backdrop">
   <div class="modal-dialog">
     <div class="modal-header">
       <div>
@@ -213,7 +213,7 @@
   </div>
 </div>
 
-<div id="modal-edit-budget" class="modal-backdrop" onclick="handleBackdropClick(event, 'modal-edit-budget')">
+<div id="modal-edit-budget" class="modal-backdrop">
   <div class="modal-dialog">
     <div class="modal-header">
       <div>

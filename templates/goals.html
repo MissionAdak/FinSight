@@ -65,7 +65,7 @@
       <div class="kpi-value font-mono">{{ overall_progress }}%</div>
       <div class="kpi-footer">
         <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-1">
-          <div class="bg-blue-600 h-full rounded-full" style="width: {{ overall_progress }}%"></div>
+          <div class="bg-blue-600 h-full rounded-full" data-width="{{ overall_progress }}"></div>
         </div>
       </div>
     </div>
@@ -79,7 +79,7 @@
       </div>
     </div>
     <div class="line-chart-container" style="height: 280px;">
-      <canvas id="goalsProjectionChart"></canvas>
+      <canvas id="goalsProjectionChart" data-names="{{ goal_names|tojson|forceescape }}" data-saved="{{ goal_saved_amounts|tojson|forceescape }}" data-targets="{{ goal_target_amounts|tojson|forceescape }}" data-currency="{{ currency_symbol }}"></canvas>
     </div>
   </div>
 
@@ -110,7 +110,7 @@
 
           <div class="goal-progress-wrap">
             <div class="goal-progress-bar">
-              <div class="goal-progress-fill {% if g.progress_pct >= 100 %}fill-blue{% elif g.computed_status == 'At Risk' %}fill-warning{% else %}fill-green{% endif %}" style="width: {{ g.progress_pct }}%"></div>
+              <div class="goal-progress-fill {% if g.progress_pct >= 100 %}fill-blue{% elif g.computed_status == 'At Risk' %}fill-warning{% else %}fill-green{% endif %}" data-width="{{ g.progress_pct }}"></div>
             </div>
             <div class="goal-progress-labels">
               <span class="progress-pct font-mono font-bold">{{ g.progress_pct }}% Completed</span>
@@ -196,12 +196,12 @@
       <div class="modal-body">
         <div class="form-row">
           <div class="form-group flex-2">
-            <label class="form-label">Goal Title *</label>
-            <input type="text" name="goal_name" class="form-control" placeholder="e.g. Buy a Home, Retirement Corpus" required>
+            <label for="add-goal-name" class="form-label">Goal Title *</label>
+            <input type="text" id="add-goal-name" name="goal_name" class="form-control" placeholder="e.g. Buy a Home, Retirement Corpus" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Goal Category *</label>
-            <select name="goal_type" class="form-control" required>
+            <label for="add-goal-type" class="form-label">Goal Category *</label>
+            <select id="add-goal-type" name="goal_type" class="form-control" required>
               <option value="Home">Home</option>
               <option value="Retirement">Retirement</option>
               <option value="Travel">Travel</option>
@@ -215,23 +215,23 @@
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Target Corpus ({{ currency_symbol }}) *</label>
-            <input type="number" step="any" min="1" name="target_amount" class="form-control" placeholder="100000.00" required>
+            <label for="add-goal-target" class="form-label">Target Corpus ({{ currency_symbol }}) *</label>
+            <input type="number" id="add-goal-target" step="any" min="1" name="target_amount" class="form-control" placeholder="100000.00" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Initial Seed Amount ({{ currency_symbol }})</label>
-            <input type="number" step="any" min="0" name="current_amount" class="form-control" placeholder="0.00">
+            <label for="add-goal-current" class="form-label">Initial Seed Amount ({{ currency_symbol }})</label>
+            <input type="number" id="add-goal-current" step="any" min="0" name="current_amount" class="form-control" placeholder="0.00">
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Target Completion Date *</label>
-            <input type="date" name="target_date" class="form-control" required>
+            <label for="add-goal-date" class="form-label">Target Completion Date *</label>
+            <input type="date" id="add-goal-date" name="target_date" class="form-control" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Expected Return Rate (% CAGR)</label>
-            <input type="number" step="any" min="0" max="100" name="expected_return_rate" class="form-control" value="10.0">
+            <label for="add-goal-rate" class="form-label">Expected Return Rate (% CAGR)</label>
+            <input type="number" id="add-goal-rate" step="any" min="0" max="100" name="expected_return_rate" class="form-control" value="10.0">
           </div>
         </div>
       </div>
@@ -254,11 +254,11 @@
       <div class="modal-body">
         <div class="form-row">
           <div class="form-group flex-2">
-            <label class="form-label">Goal Title *</label>
+            <label for="editGoalName" class="form-label">Goal Title *</label>
             <input type="text" name="goal_name" id="editGoalName" class="form-control" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Goal Category *</label>
+            <label for="editGoalType" class="form-label">Goal Category *</label>
             <select name="goal_type" id="editGoalType" class="form-control" required>
               <option value="Home">Home</option>
               <option value="Retirement">Retirement</option>
@@ -273,22 +273,22 @@
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Target Corpus ({{ currency_symbol }}) *</label>
+            <label for="editGoalTarget" class="form-label">Target Corpus ({{ currency_symbol }}) *</label>
             <input type="number" step="any" min="1" name="target_amount" id="editGoalTarget" class="form-control" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Current Saved Amount ({{ currency_symbol }})</label>
+            <label for="editGoalCurrent" class="form-label">Current Saved Amount ({{ currency_symbol }})</label>
             <input type="number" step="any" min="0" name="current_amount" id="editGoalCurrent" class="form-control" required>
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Target Completion Date *</label>
+            <label for="editGoalDate" class="form-label">Target Completion Date *</label>
             <input type="date" name="target_date" id="editGoalDate" class="form-control" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Expected Return Rate (% CAGR)</label>
+            <label for="editGoalRate" class="form-label">Expected Return Rate (% CAGR)</label>
             <input type="number" step="any" min="0" max="100" name="expected_return_rate" id="editGoalRate" class="form-control">
           </div>
         </div>
@@ -311,18 +311,18 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label">Contribution Amount ({{ currency_symbol }}) *</label>
-          <input type="number" step="any" min="0.01" name="amount" class="form-control" placeholder="0.00" required>
+          <label for="contrib-amount" class="form-label">Contribution Amount ({{ currency_symbol }}) *</label>
+          <input type="number" id="contrib-amount" step="any" min="0.01" name="amount" class="form-control" placeholder="0.00" required>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Contribution Date *</label>
-            <input type="date" name="date" class="form-control" value="{{ today_date }}" required>
+            <label for="contrib-date" class="form-label">Contribution Date *</label>
+            <input type="date" id="contrib-date" name="date" class="form-control" value="{{ today_date }}" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Deduct from Account (Optional)</label>
-            <select name="account_id" class="form-control">
+            <label for="contrib-account" class="form-label">Deduct from Account (Optional)</label>
+            <select id="contrib-account" name="account_id" class="form-control">
               <option value="">No linked account deduction</option>
               {% for acc in accounts %}
                 <option value="{{ acc.id }}">{{ acc.name }} ({{ format_money(acc.balance) }})</option>
@@ -332,8 +332,8 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">Transaction Notes</label>
-          <input type="text" name="notes" class="form-control" placeholder="e.g. Monthly automated SIP, bonus deposit">
+          <label for="contrib-notes" class="form-label">Transaction Notes</label>
+          <input type="text" id="contrib-notes" name="notes" class="form-control" placeholder="e.g. Monthly automated SIP, bonus deposit">
         </div>
       </div>
       <div class="modal-footer">
@@ -377,9 +377,10 @@
 
     var chartCtx = document.getElementById('goalsProjectionChart');
     if (chartCtx) {
-      var goalNames = {{ goal_names|tojson }};
-      var savedAmounts = {{ goal_saved_amounts|tojson }};
-      var targetAmounts = {{ goal_target_amounts|tojson }};
+      var goalNames = JSON.parse(chartCtx.dataset.names || '[]');
+      var savedAmounts = JSON.parse(chartCtx.dataset.saved || '[]');
+      var targetAmounts = JSON.parse(chartCtx.dataset.targets || '[]');
+      var gCurr = chartCtx.dataset.currency || '';
 
       new Chart(chartCtx, {
         type: 'bar',
@@ -387,13 +388,13 @@
           labels: goalNames,
           datasets: [
             {
-              label: 'Saved So Far ({{ currency_symbol }})',
+              label: 'Saved So Far (' + gCurr + ')',
               data: savedAmounts,
               backgroundColor: '#10b981',
               borderRadius: 4
             },
             {
-              label: 'Target Corpus ({{ currency_symbol }})',
+              label: 'Target Corpus (' + gCurr + ')',
               data: targetAmounts,
               backgroundColor: isDark ? '#334155' : '#e2e8f0',
               borderRadius: 4
@@ -410,7 +411,7 @@
             tooltip: {
               callbacks: {
                 label: function(ctx) {
-                  return ' ' + ctx.dataset.label + ': {{ currency_symbol }}' + ctx.parsed.y.toLocaleString();
+                  return ' ' + ctx.dataset.label + ': ' + gCurr + ctx.parsed.y.toLocaleString();
                 }
               }
             }
@@ -424,7 +425,7 @@
               grid: { color: gridColor },
               ticks: {
                 color: textColor,
-                callback: function(v) { return '{{ currency_symbol }}' + Number(v).toLocaleString(); }
+                callback: function(v) { return gCurr + Number(v).toLocaleString(); }
               }
             }
           }

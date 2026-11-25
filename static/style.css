@@ -175,7 +175,7 @@ a:hover {
   font-size: 13.5px;
   font-weight: 500;
   text-decoration: none;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .nav-item:hover {
@@ -349,7 +349,7 @@ a:hover {
   border: 1px solid var(--border-color);
   cursor: pointer;
   position: relative;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   text-decoration: none;
 }
 
@@ -526,7 +526,7 @@ a:hover {
   background-color: var(--bg-card);
   color: var(--text-secondary);
   text-decoration: none;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .btn-logout:hover {
@@ -693,7 +693,7 @@ a:hover {
 .icon-inflow  { background-color: rgba(37, 99, 235, 0.12); color: var(--primary); }
 .icon-outflow { background-color: rgba(249, 115, 22, 0.12); color: var(--accent-orange); }
 .icon-savings { background-color: rgba(34, 197, 94, 0.12); color: var(--color-green); }
-.icon-budget  { background-color: rgba(139, 92, 246, 0.12); color: #8b5cf6; }
+.icon-budget  { background-color: #ede9fe; color: #5b21b6; }
 
 .kpi-figure {
   font-size: 22px;
@@ -999,7 +999,7 @@ a:hover {
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 .btn-delete-row:hover {
   background-color: rgba(239, 68, 68, 0.15);
@@ -1084,7 +1084,7 @@ a:hover {
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .budget-tab-btn.active {
@@ -1537,7 +1537,7 @@ a:hover {
   font-weight: 600;
   cursor: pointer;
   text-align: left;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .settings-tab-btn:hover {
@@ -1595,7 +1595,7 @@ a:hover {
   border-radius: 10px;
   padding: 16px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
   display: block;
   position: relative;
 }
@@ -1815,7 +1815,7 @@ a:hover {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .btn-secondary:hover {
   background-color: var(--border-color);
@@ -1851,7 +1851,7 @@ a:hover {
   border-radius: 8px;
   padding: 12px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
   position: relative;
   display: flex;
   align-items: flex-start;
@@ -1962,8 +1962,8 @@ a:hover {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background-color: rgba(249, 115, 22, 0.25);
-  color: #f97316;
+  background-color: #c2410c;
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2091,7 +2091,7 @@ a:hover {
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .login-type-opt input:checked + .login-type-btn {
@@ -2282,7 +2282,7 @@ a:hover {
   padding: 8px 16px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
   white-space: nowrap;
 }
 
@@ -2417,7 +2417,7 @@ a:hover {
   border-radius: 4px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tf-btn:hover {
@@ -2485,13 +2485,13 @@ a:hover {
   width: fit-content;
 }
 
-.tag-type-equity { background: rgba(37, 99, 235, 0.1); color: #2563eb; }
-.tag-type-mutual-fund { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-.tag-type-etf { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
-.tag-type-debt { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-.tag-type-bond { background: rgba(6, 182, 212, 0.1); color: #06b6d4; }
-.tag-type-gold { background: rgba(234, 179, 8, 0.15); color: #b45309; }
-.tag-type-cash { background: rgba(100, 116, 139, 0.1); color: #64748b; }
+.tag-type-equity { background: #dbeafe; color: #1e40af; }
+.tag-type-mutual-fund { background: #d1fae5; color: #065f46; }
+.tag-type-etf { background: #ede9fe; color: #5b21b6; }
+.tag-type-debt { background: #fef3c7; color: #92400e; }
+.tag-type-bond { background: #cffafe; color: #155e75; }
+.tag-type-gold { background: #fef9c3; color: #854d0e; }
+.tag-type-cash { background: #f1f5f9; color: #334155; }
 
 .market-overview-card {
   background-color: var(--bg-card);
@@ -2521,8 +2521,8 @@ a:hover {
   font-weight: 800;
   padding: 1px 6px;
   border-radius: 10px;
-  background-color: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  background-color: #d1fae5;
+  color: #065f46;
 }
 
 .mkt-index-item {
@@ -2664,17 +2664,17 @@ a:hover {
   width: fit-content;
 }
 
-.type-home { background: rgba(37, 99, 235, 0.1); color: #2563eb; }
-.type-retirement { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
-.type-travel { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-.type-education { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-.type-emergency { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-.type-major-purchase { background: rgba(6, 182, 212, 0.1); color: #06b6d4; }
-.type-other { background: rgba(100, 116, 139, 0.1); color: #64748b; }
+.type-home { background: #dbeafe; color: #1e40af; }
+.type-retirement { background: #ede9fe; color: #5b21b6; }
+.type-travel { background: #fef3c7; color: #92400e; }
+.type-education { background: #d1fae5; color: #065f46; }
+.type-emergency { background: #fee2e2; color: #991b1b; }
+.type-major-purchase { background: #cffafe; color: #155e75; }
+.type-other { background: #f1f5f9; color: #334155; }
 
-.status-pill.pill-on-track { background: rgba(16, 185, 129, 0.12); color: #10b981; }
-.status-pill.pill-at-risk { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
-.status-pill.pill-completed { background: rgba(37, 99, 235, 0.12); color: #2563eb; }
+.status-pill.pill-on-track { background: #d1fae5; color: #065f46; }
+.status-pill.pill-at-risk { background: #fee2e2; color: #991b1b; }
+.status-pill.pill-completed { background: #dbeafe; color: #1e40af; }
 
 .goal-amount-display {
   display: flex;
@@ -2843,7 +2843,7 @@ a:hover {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .btn-danger-ghost:hover {
@@ -2853,6 +2853,38 @@ a:hover {
 .notif-item-success {
   border-left: 3px solid #10b981;
 }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[data-theme="dark"] .icon-budget { background-color: #4c1d95; color: #ddd6fe; }
+[data-theme="dark"] .tag-type-equity,
+[data-theme="dark"] .type-home,
+[data-theme="dark"] .status-pill.pill-completed { background: #1e3a8a; color: #bfdbfe; }
+[data-theme="dark"] .tag-type-mutual-fund,
+[data-theme="dark"] .type-education,
+[data-theme="dark"] .status-pill.pill-on-track,
+[data-theme="dark"] .mkt-live-pill { background: #064e3b; color: #a7f3d0; }
+[data-theme="dark"] .tag-type-etf,
+[data-theme="dark"] .type-retirement { background: #4c1d95; color: #ddd6fe; }
+[data-theme="dark"] .tag-type-debt,
+[data-theme="dark"] .type-travel { background: #78350f; color: #fde68a; }
+[data-theme="dark"] .tag-type-bond,
+[data-theme="dark"] .type-major-purchase { background: #164e63; color: #a5f3fc; }
+[data-theme="dark"] .tag-type-gold { background: #713f12; color: #fef08a; }
+[data-theme="dark"] .tag-type-cash,
+[data-theme="dark"] .type-other { background: #334155; color: #e2e8f0; }
+[data-theme="dark"] .type-emergency,
+[data-theme="dark"] .status-pill.pill-at-risk { background: #7f1d1d; color: #fecaca; }
 
 @media (max-width: 900px) {
   .donut-chart-layout {

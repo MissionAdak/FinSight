@@ -3,7 +3,7 @@ import re
 import csv
 import io
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
 from flask import Flask, render_template, redirect, url_for, request, flash, session, Response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -22,6 +22,19 @@ db.init_app(app)
 
 reset_serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 failed_login_attempts = {}
+
+PAY_CREDIT_CARD = 'Credit Card'
+PAY_BANK_TRANSFER = 'Bank Transfer'
+ASSET_MUTUAL_FUND = 'Mutual Fund'
+ERR_GOAL_NOT_FOUND = 'Financial goal not found or unauthorized access.'
+ERR_INV_NOT_FOUND = 'Investment holding not found or unauthorized access.'
+TPL_LOGIN = 'login.html'
+TPL_FORGOT_PW = 'forgot_password.html'
+TPL_RESET_PW = 'reset_password.html'
+CHART_PALETTE = [
+    '#1a56db', '#f97316', '#10b981', '#6366f1', '#ec4899',
+    '#8b5cf6', '#14b8a6', '#f59e0b', '#06b6d4', '#64748b'
+]
 
 CURRENCIES = {
     'USD': {'code': 'USD', 'symbol': '$', 'name': 'US Dollar'},
@@ -59,6 +72,7 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Please sign in to access your FinSight workspace.'
 login_manager.login_message_category = 'info'
 
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -92,15 +106,96 @@ def csrf_protect():
             return redirect(request.referrer or url_for('dashboard'))
 
 
+def _collect_budget_alerts(user):
+    alerts = []
+    for b in user.budgets:
+        pct = (b.spent / b.allocated * 100) if b.allocated > 0 else 0
+        thresh = b.alert_threshold or 80
+        if pct >= thresh:
+            alerts.append({
+                'id': b.id,
+                'category': b.name,
+                'spent': b.spent,
+                'allocated': b.allocated,
+                'pct': round(pct, 1),
+                'is_over': pct > 100,
+                'thresh': thresh
+            })
+    return alerts
+
+
+def _collect_investment_alerts(user):
+    alerts = []
+    for inv in user.investments:
+        if inv.return_pct >= 25.0:
+            alerts.append({
+                'title': f'{inv.asset_name} Outperforming',
+                'desc': f'Unrealized gain of +{inv.return_pct}% on holding.',
+                'is_gain': True
+            })
+        elif inv.return_pct <= -10.0:
+            alerts.append({
+                'title': f'{inv.asset_name} Drawdown Alert',
+                'desc': f'Holding is down {inv.return_pct}% against purchase price.',
+                'is_gain': False
+            })
+        elif abs(inv.day_change_pct) >= 3.0:
+            alerts.append({
+                'title': f'{inv.asset_name} Volatility',
+                'desc': f'Intraday movement of {inv.day_change_pct:+.1f}% recorded today.',
+                'is_gain': inv.day_change_pct > 0
+            })
+    return alerts
+
+
+def _collect_goal_alerts(user):
+    alerts = []
+    for g in user.goals:
+        if g.computed_status == 'At Risk':
+            alerts.append({
+                'title': f'Goal at Risk: {g.goal_name}',
+                'desc': f'Behind schedule. Target date {g.target_date}. Recommended: {format_money(g.recommended_monthly_saving)}/mo.',
+                'is_risk': True
+            })
+        elif g.progress_pct >= 100.0:
+            alerts.append({
+                'title': f'Target Achieved: {g.goal_name}',
+                'desc': f'Target corpus of {format_money(g.target_amount)} fully funded!',
+                'is_risk': False
+            })
+        elif 75.0 <= g.progress_pct < 80.0:
+            alerts.append({
+                'title': f'Milestone Hit: {g.goal_name}',
+                'desc': f'{g.progress_pct}% of goal corpus accumulated.',
+                'is_risk': False
+            })
+    return alerts
+
+
+def _compute_sidebar_summary(user):
+    now_prefix = datetime.now().strftime('%Y-%m')
+    m_in = sum(t.amount for t in user.transactions if t.txn_type == 'income' and t.date.startswith(now_prefix))
+    m_out = sum(t.amount for t in user.transactions if t.txn_type == 'expense' and t.date.startswith(now_prefix))
+    tot_alloc = sum(b.allocated for b in user.budgets if b.period == 'Monthly')
+    tot_sp = sum(b.spent for b in user.budgets if b.period == 'Monthly')
+    b_pct = round((tot_sp / tot_alloc * 100), 1) if tot_alloc > 0 else 0.0
+    return {
+        'income': m_in,
+        'expense': m_out,
+        'savings': m_in - m_out,
+        'budget_pct': min(b_pct, 100.0),
+        'allocated': tot_alloc,
+        'spent': tot_sp
+    }
+
+
 @app.context_processor
 def inject_global_context():
     if 'csrf_token' not in session:
         session['csrf_token'] = secrets.token_hex(32)
-    
+
     code, symbol = get_user_currency_info()
-    theme = 'light'
-    if current_user.is_authenticated and current_user.theme:
-        theme = current_user.theme
+    theme = current_user.theme if (current_user.is_authenticated and current_user.theme) else 'light'
 
     budget_alerts = []
     investment_alerts = []
@@ -115,77 +210,10 @@ def inject_global_context():
     }
 
     if current_user.is_authenticated:
-        for b in current_user.budgets:
-            pct = (b.spent / b.allocated * 100) if b.allocated > 0 else 0
-            thresh = b.alert_threshold or 80
-            if pct >= thresh:
-                budget_alerts.append({
-                    'id': b.id,
-                    'category': b.name,
-                    'spent': b.spent,
-                    'allocated': b.allocated,
-                    'pct': round(pct, 1),
-                    'is_over': pct > 100,
-                    'thresh': thresh
-                })
-
-        for inv in current_user.investments:
-            if inv.return_pct >= 25.0:
-                investment_alerts.append({
-                    'title': f'{inv.asset_name} Outperforming',
-                    'desc': f'Unrealized gain of +{inv.return_pct}% on holding.',
-                    'is_gain': True
-                })
-            elif inv.return_pct <= -10.0:
-                investment_alerts.append({
-                    'title': f'{inv.asset_name} Drawdown Alert',
-                    'desc': f'Holding is down {inv.return_pct}% against purchase price.',
-                    'is_gain': False
-                })
-            elif abs(inv.day_change_pct) >= 3.0:
-                investment_alerts.append({
-                    'title': f'{inv.asset_name} Volatility',
-                    'desc': f'Intraday movement of {inv.day_change_pct:+.1f}% recorded today.',
-                    'is_gain': inv.day_change_pct > 0
-                })
-
-        for g in current_user.goals:
-            c_status = g.computed_status
-            if c_status == 'At Risk':
-                goal_alerts.append({
-                    'title': f'Goal at Risk: {g.goal_name}',
-                    'desc': f'Behind schedule. Target date {g.target_date}. Recommended: {format_money(g.recommended_monthly_saving)}/mo.',
-                    'is_risk': True
-                })
-            elif g.progress_pct >= 100.0:
-                goal_alerts.append({
-                    'title': f'Target Achieved: {g.goal_name}',
-                    'desc': f'Target corpus of {format_money(g.target_amount)} fully funded!',
-                    'is_risk': False
-                })
-            elif g.progress_pct >= 75.0 and g.progress_pct < 80.0:
-                goal_alerts.append({
-                    'title': f'Milestone Hit: {g.goal_name}',
-                    'desc': f'{g.progress_pct}% of goal corpus accumulated.',
-                    'is_risk': False
-                })
-
-        now_prefix = datetime.now().strftime('%Y-%m')
-        m_in = sum(t.amount for t in current_user.transactions if t.txn_type == 'income' and t.date.startswith(now_prefix))
-        m_out = sum(t.amount for t in current_user.transactions if t.txn_type == 'expense' and t.date.startswith(now_prefix))
-        m_sav = m_in - m_out
-        tot_alloc = sum(b.allocated for b in current_user.budgets if b.period == 'Monthly')
-        tot_sp = sum(b.spent for b in current_user.budgets if b.period == 'Monthly')
-        b_pct = round((tot_sp / tot_alloc * 100), 1) if tot_alloc > 0 else 0.0
-
-        sidebar_summary = {
-            'income': m_in,
-            'expense': m_out,
-            'savings': m_sav,
-            'budget_pct': min(b_pct, 100.0),
-            'allocated': tot_alloc,
-            'spent': tot_sp
-        }
+        budget_alerts = _collect_budget_alerts(current_user)
+        investment_alerts = _collect_investment_alerts(current_user)
+        goal_alerts = _collect_goal_alerts(current_user)
+        sidebar_summary = _compute_sidebar_summary(current_user)
 
     total_notif_count = len(budget_alerts) + len(investment_alerts) + len(goal_alerts)
 
@@ -237,30 +265,34 @@ def validate_email_format(email):
     return len(tld) >= 2
 
 
+def _validate_india_phone(clean):
+    digits = clean
+    if digits.startswith('+91'):
+        digits = digits[3:]
+    elif digits.startswith('91') and len(digits) == 12:
+        digits = digits[2:]
+    elif digits.startswith('0') and len(digits) == 11:
+        digits = digits[1:]
+    if re.match(r'^[6-9]\d{9}$', digits):
+        return True, f"+91 {digits[:5]} {digits[5:]}"
+    return False, None
+
+
+def _validate_intl_phone(clean):
+    num_only = re.sub(r'[^\d]', '', clean)
+    if 7 <= len(num_only) <= 15:
+        formatted = clean if clean.startswith('+') else f"+{num_only}"
+        return True, formatted
+    return False, None
+
+
 def validate_phone(phone, country='India'):
     if not phone:
         return False, None
     clean = re.sub(r'[\s\-\(\)\.]', '', phone)
-    
     if country == 'India':
-        digits = clean
-        if digits.startswith('+91'):
-            digits = digits[3:]
-        elif digits.startswith('91') and len(digits) == 12:
-            digits = digits[2:]
-        elif digits.startswith('0') and len(digits) == 11:
-            digits = digits[1:]
-        
-        if re.match(r'^[6-9]\d{9}$', digits):
-            return True, f"+91 {digits[:5]} {digits[5:]}"
-        return False, None
-    else:
-        num_only = re.sub(r'[^\d]', '', clean)
-        if 7 <= len(num_only) <= 15:
-            if clean.startswith('+'):
-                return True, clean
-            return True, f"+{num_only}"
-        return False, None
+        return _validate_india_phone(clean)
+    return _validate_intl_phone(clean)
 
 
 def get_last_6_months():
@@ -279,14 +311,84 @@ def get_last_6_months():
     return months
 
 
+def _seed_admin_ledger(user, months, primary_acc, credit_acc, wallet_acc):
+    budgets = [
+        BudgetCategory(user_id=user.id, name='Cloud Infrastructure & SaaS', allocated=450000.0, spent=392000.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Platform Engineering & Payroll', allocated=850000.0, spent=814000.0, period='Monthly', alert_threshold=85),
+        BudgetCategory(user_id=user.id, name='Regulatory & Security Compliance', allocated=250000.0, spent=175000.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Enterprise Merchant Acquisition', allocated=350000.0, spent=368000.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Corporate Facilities & Utilities', allocated=300000.0, spent=221000.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Annual Datacenter Hardware Cap', allocated=4500000.0, spent=3200000.0, period='Yearly', alert_threshold=75)
+    ]
+    txns = []
+    for idx, m in enumerate(months):
+        mo_key = m['key']
+        factor = 0.82 + (idx * 0.035)
+        txns.extend([
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Enterprise Platform Licensing', category='Platform Revenue', amount=round(1850000.0 * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-05", status='Completed', notes=f"{m['label']} Corporate SaaS Invoicing"),
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Merchant Processing Volume Fees', category='Transaction Fees', amount=round(784500.0 * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-15", status='Completed', notes=f"{m['label']} Network interchange settlement"),
+            Transaction(user_id=user.id, account_id=credit_acc.id, title='AWS Cloud Hosting Infrastructure', category='Cloud Infrastructure & SaaS', amount=round(245000.0 * factor, 2), txn_type='expense', payment_mode=PAY_CREDIT_CARD, date=f"{mo_key}-10", status='Completed', notes=f"{m['label']} CDN & DB cluster nodes"),
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Engineering & Dev Payroll', category='Platform Engineering & Payroll', amount=round(650000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-28", status='Completed', notes=f"{m['label']} Automated payroll cycle"),
+            Transaction(user_id=user.id, account_id=wallet_acc.id, title='Security Compliance Audit Review', category='Regulatory & Security Compliance', amount=round(175000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-22", status='Completed', notes=f"{m['label']} Attestation & certification")
+        ])
+    return budgets, txns
+
+
+def _seed_shop_ledger(user, months, primary_acc, wallet_acc):
+    budgets = [
+        BudgetCategory(user_id=user.id, name='Inventory Restock & Wholesale', allocated=380000.0, spent=345000.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Storefront Lease & Utilities', allocated=120000.0, spent=118000.0, period='Monthly', alert_threshold=85),
+        BudgetCategory(user_id=user.id, name='Retail Staff Wages & Overtime', allocated=160000.0, spent=149000.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='POS Terminals & Merchant Fees', allocated=65000.0, spent=68500.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Local Promotional Campaigns', allocated=50000.0, spent=39500.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Storefront Annual Renovation', allocated=1500000.0, spent=920000.0, period='Yearly', alert_threshold=70)
+    ]
+    txns = []
+    for idx, m in enumerate(months):
+        mo_key = m['key']
+        factor = 0.85 + (idx * 0.03)
+        txns.extend([
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Storefront Register Settlement', category='Retail Sales', amount=round(468000.0 * factor, 2), txn_type='income', payment_mode='UPI', date=f"{mo_key}-04", status='Completed', notes=f"{m['label']} Counter POS batches"),
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Online Delivery Marketplace Sales', category='E-Commerce', amount=round(184000.0 * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-18", status='Completed', notes=f"{m['label']} Partner fulfillment payouts"),
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='FMCG Goods Wholesale Delivery', category='Inventory Restock & Wholesale', amount=round(215000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-08", status='Completed', notes=f"{m['label']} Supplier batch invoice"),
+            Transaction(user_id=user.id, account_id=wallet_acc.id, title='Store Electricity & Cold Storage', category='Storefront Lease & Utilities', amount=round(34000.0 * factor, 2), txn_type='expense', payment_mode='UPI', date=f"{mo_key}-14", status='Completed', notes=f"{m['label']} Utility provider bill"),
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Floor Associates Wages', category='Retail Staff Wages & Overtime', amount=round(74500.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-26", status='Completed', notes=f"{m['label']} Staff bi-weekly payroll")
+        ])
+    return budgets, txns
+
+
+def _seed_personal_ledger(user, months, primary_acc, credit_acc, wallet_acc):
+    base_income = (user.total_income / 12.0) if (user.total_income and user.total_income > 0) else 85000.0
+    budgets = [
+        BudgetCategory(user_id=user.id, name='Housing & Rent / EMI', allocated=round(base_income * 0.32, 0), spent=round(base_income * 0.32, 0), period='Monthly', alert_threshold=85),
+        BudgetCategory(user_id=user.id, name='Groceries & Household Goods', allocated=round(base_income * 0.18, 0), spent=round(base_income * 0.15, 0), period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Utilities, Mobile & Internet', allocated=round(base_income * 0.08, 0), spent=round(base_income * 0.07, 0), period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Transportation & Auto Fuel', allocated=round(base_income * 0.10, 0), spent=round(base_income * 0.11, 0), period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Savings, SIPs & Mutual Funds', allocated=round(base_income * 0.25, 0), spent=round(base_income * 0.22, 0), period='Monthly', alert_threshold=90),
+        BudgetCategory(user_id=user.id, name='Annual Vacation & Travel Fund', allocated=round(base_income * 1.5, 0), spent=round(base_income * 1.1, 0), period='Yearly', alert_threshold=75)
+    ]
+    txns = []
+    for idx, m in enumerate(months):
+        mo_key = m['key']
+        factor = 0.88 + (idx * 0.024)
+        txns.extend([
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Primary Monthly Salary', category='Salary / Earnings', amount=round(base_income * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-01", status='Completed', notes=f"{m['label']} Direct payroll NEFT"),
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Advisory Consulting Retainer', category='Secondary Income', amount=round(base_income * 0.25 * factor, 2), txn_type='income', payment_mode='UPI', date=f"{mo_key}-15", status='Completed', notes=f"{m['label']} Professional advisory retainer"),
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Apartment Monthly Lease Payment', category='Housing & Rent / EMI', amount=round(base_income * 0.32, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-03", status='Completed', notes=f"{m['label']} Residence rent auto-debit"),
+            Transaction(user_id=user.id, account_id=credit_acc.id, title='Supermarket & Household Supplies', category='Groceries & Household Goods', amount=round(base_income * 0.14 * factor, 2), txn_type='expense', payment_mode=PAY_CREDIT_CARD, date=f"{mo_key}-11", status='Completed', notes=f"{m['label']} Pantry & kitchen essentials"),
+            Transaction(user_id=user.id, account_id=wallet_acc.id, title='High-Speed Fiber & Mobile Plan', category='Utilities, Mobile & Internet', amount=round(base_income * 0.07, 2), txn_type='expense', payment_mode='UPI', date=f"{mo_key}-19", status='Completed', notes=f"{m['label']} Utility bill payment"),
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Index Fund SIP Automated Allocation', category='Savings, SIPs & Mutual Funds', amount=round(base_income * 0.22, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-25", status='Completed', notes=f"{m['label']} Mutual fund monthly investment")
+        ])
+    return budgets, txns
+
+
 def seed_user_financial_profile(user):
-    today = datetime.now()
     months = get_last_6_months()
 
     accounts = [
         Account(user_id=user.id, name='Primary Checking Account', account_type='Bank', balance=350000.0),
         Account(user_id=user.id, name='High-Yield Savings', account_type='Bank', balance=750000.0),
-        Account(user_id=user.id, name='Corporate Credit Card', account_type='Credit Card', balance=-35000.0),
+        Account(user_id=user.id, name='Corporate Credit Card', account_type=PAY_CREDIT_CARD, balance=-35000.0),
         Account(user_id=user.id, name='Mobile UPI & Digital Wallet', account_type='Wallet', balance=25000.0),
         Account(user_id=user.id, name='Petty Cash Reserve', account_type='Cash', balance=10000.0)
     ]
@@ -299,63 +401,11 @@ def seed_user_financial_profile(user):
     wallet_acc = accounts[3]
 
     if user.role == 'admin':
-        budgets = [
-            BudgetCategory(user_id=user.id, name='Cloud Infrastructure & SaaS', allocated=450000.0, spent=392000.0, period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='Platform Engineering & Payroll', allocated=850000.0, spent=814000.0, period='Monthly', alert_threshold=85),
-            BudgetCategory(user_id=user.id, name='Regulatory & Security Compliance', allocated=250000.0, spent=175000.0, period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='Enterprise Merchant Acquisition', allocated=350000.0, spent=368000.0, period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='Corporate Facilities & Utilities', allocated=300000.0, spent=221000.0, period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='Annual Datacenter Hardware Cap', allocated=4500000.0, spent=3200000.0, period='Yearly', alert_threshold=75)
-        ]
-        txns = []
-        for idx, m in enumerate(months):
-            mo_key = m['key']
-            factor = 0.82 + (idx * 0.035)
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='Enterprise Platform Licensing', category='Platform Revenue', amount=round(1850000.0 * factor, 2), txn_type='income', payment_mode='Bank Transfer', date=f"{mo_key}-05", status='Completed', notes=f"{m['label']} Corporate SaaS Invoicing"))
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='Merchant Processing Volume Fees', category='Transaction Fees', amount=round(784500.0 * factor, 2), txn_type='income', payment_mode='Bank Transfer', date=f"{mo_key}-15", status='Completed', notes=f"{m['label']} Network interchange settlement"))
-            txns.append(Transaction(user_id=user.id, account_id=credit_acc.id, title='AWS Cloud Hosting Infrastructure', category='Cloud Infrastructure & SaaS', amount=round(245000.0 * factor, 2), txn_type='expense', payment_mode='Credit Card', date=f"{mo_key}-10", status='Completed', notes=f"{m['label']} CDN & DB cluster nodes"))
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='Engineering & Dev Payroll', category='Platform Engineering & Payroll', amount=round(650000.0 * factor, 2), txn_type='expense', payment_mode='Bank Transfer', date=f"{mo_key}-28", status='Completed', notes=f"{m['label']} Automated payroll cycle"))
-            txns.append(Transaction(user_id=user.id, account_id=wallet_acc.id, title='Security Compliance Audit Review', category='Regulatory & Security Compliance', amount=round(175000.0 * factor, 2), txn_type='expense', payment_mode='Bank Transfer', date=f"{mo_key}-22", status='Completed', notes=f"{m['label']} Attestation & certification"))
-
+        budgets, txns = _seed_admin_ledger(user, months, primary_acc, credit_acc, wallet_acc)
     elif user.role == 'shop_owner':
-        budgets = [
-            BudgetCategory(user_id=user.id, name='Inventory Restock & Wholesale', allocated=380000.0, spent=345000.0, period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='Storefront Lease & Utilities', allocated=120000.0, spent=118000.0, period='Monthly', alert_threshold=85),
-            BudgetCategory(user_id=user.id, name='Retail Staff Wages & Overtime', allocated=160000.0, spent=149000.0, period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='POS Terminals & Merchant Fees', allocated=65000.0, spent=68500.0, period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='Local Promotional Campaigns', allocated=50000.0, spent=39500.0, period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='Storefront Annual Renovation', allocated=1500000.0, spent=920000.0, period='Yearly', alert_threshold=70)
-        ]
-        txns = []
-        for idx, m in enumerate(months):
-            mo_key = m['key']
-            factor = 0.85 + (idx * 0.03)
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='Storefront Register Settlement', category='Retail Sales', amount=round(468000.0 * factor, 2), txn_type='income', payment_mode='UPI', date=f"{mo_key}-04", status='Completed', notes=f"{m['label']} Counter POS batches"))
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='Online Delivery Marketplace Sales', category='E-Commerce', amount=round(184000.0 * factor, 2), txn_type='income', payment_mode='Bank Transfer', date=f"{mo_key}-18", status='Completed', notes=f"{m['label']} Partner fulfillment payouts"))
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='FMCG Goods Wholesale Delivery', category='Inventory Restock & Wholesale', amount=round(215000.0 * factor, 2), txn_type='expense', payment_mode='Bank Transfer', date=f"{mo_key}-08", status='Completed', notes=f"{m['label']} Supplier batch invoice"))
-            txns.append(Transaction(user_id=user.id, account_id=wallet_acc.id, title='Store Electricity & Cold Storage', category='Storefront Lease & Utilities', amount=round(34000.0 * factor, 2), txn_type='expense', payment_mode='UPI', date=f"{mo_key}-14", status='Completed', notes=f"{m['label']} Utility provider bill"))
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='Floor Associates Wages', category='Retail Staff Wages & Overtime', amount=round(74500.0 * factor, 2), txn_type='expense', payment_mode='Bank Transfer', date=f"{mo_key}-26", status='Completed', notes=f"{m['label']} Staff bi-weekly payroll"))
-
+        budgets, txns = _seed_shop_ledger(user, months, primary_acc, wallet_acc)
     else:
-        base_income = (user.total_income / 12.0) if (user.total_income and user.total_income > 0) else 85000.0
-        budgets = [
-            BudgetCategory(user_id=user.id, name='Housing & Rent / EMI', allocated=round(base_income * 0.32, 0), spent=round(base_income * 0.32, 0), period='Monthly', alert_threshold=85),
-            BudgetCategory(user_id=user.id, name='Groceries & Household Goods', allocated=round(base_income * 0.18, 0), spent=round(base_income * 0.15, 0), period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='Utilities, Mobile & Internet', allocated=round(base_income * 0.08, 0), spent=round(base_income * 0.07, 0), period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='Transportation & Auto Fuel', allocated=round(base_income * 0.10, 0), spent=round(base_income * 0.11, 0), period='Monthly', alert_threshold=80),
-            BudgetCategory(user_id=user.id, name='Savings, SIPs & Mutual Funds', allocated=round(base_income * 0.25, 0), spent=round(base_income * 0.22, 0), period='Monthly', alert_threshold=90),
-            BudgetCategory(user_id=user.id, name='Annual Vacation & Travel Fund', allocated=round(base_income * 1.5, 0), spent=round(base_income * 1.1, 0), period='Yearly', alert_threshold=75)
-        ]
-        txns = []
-        for idx, m in enumerate(months):
-            mo_key = m['key']
-            factor = 0.88 + (idx * 0.024)
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='Primary Monthly Salary', category='Salary / Earnings', amount=round(base_income * factor, 2), txn_type='income', payment_mode='Bank Transfer', date=f"{mo_key}-01", status='Completed', notes=f"{m['label']} Direct payroll NEFT"))
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='Advisory Consulting Retainer', category='Secondary Income', amount=round(base_income * 0.25 * factor, 2), txn_type='income', payment_mode='UPI', date=f"{mo_key}-15", status='Completed', notes=f"{m['label']} Professional advisory retainer"))
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='Apartment Monthly Lease Payment', category='Housing & Rent / EMI', amount=round(base_income * 0.32, 2), txn_type='expense', payment_mode='Bank Transfer', date=f"{mo_key}-03", status='Completed', notes=f"{m['label']} Residence rent auto-debit"))
-            txns.append(Transaction(user_id=user.id, account_id=credit_acc.id, title='Supermarket & Household Supplies', category='Groceries & Household Goods', amount=round(base_income * 0.14 * factor, 2), txn_type='expense', payment_mode='Credit Card', date=f"{mo_key}-11", status='Completed', notes=f"{m['label']} Pantry & kitchen essentials"))
-            txns.append(Transaction(user_id=user.id, account_id=wallet_acc.id, title='High-Speed Fiber & Mobile Plan', category='Utilities, Mobile & Internet', amount=round(base_income * 0.07, 2), txn_type='expense', payment_mode='UPI', date=f"{mo_key}-19", status='Completed', notes=f"{m['label']} Utility bill payment"))
-            txns.append(Transaction(user_id=user.id, account_id=primary_acc.id, title='Index Fund SIP Automated Allocation', category='Savings, SIPs & Mutual Funds', amount=round(base_income * 0.22, 2), txn_type='expense', payment_mode='Bank Transfer', date=f"{mo_key}-25", status='Completed', notes=f"{m['label']} Mutual fund monthly investment"))
+        budgets, txns = _seed_personal_ledger(user, months, primary_acc, credit_acc, wallet_acc)
 
     for b in budgets:
         db.session.add(b)
@@ -376,7 +426,7 @@ def seed_user_investments_and_goals(user):
             ('Apple Inc.', 'AAPL', 'Equity', 25.0, 185.00, 228.50, 1.4, '2026-05-15', 'Core consumer tech holding'),
             ('Microsoft Corp.', 'MSFT', 'Equity', 20.0, 340.00, 425.00, 0.8, '2026-06-10', 'Cloud and AI enterprise infrastructure'),
             ('Vanguard S&P 500 ETF', 'VOO', 'ETF', 45.0, 410.00, 512.00, 0.4, '2026-04-20', 'Broad US large-cap passive index'),
-            ('Fidelity Contrafund', 'FCNTX', 'Mutual Fund', 150.0, 18.50, 24.20, -0.2, '2026-03-12', 'Active large-cap growth fund'),
+            ('Fidelity Contrafund', 'FCNTX', ASSET_MUTUAL_FUND, 150.0, 18.50, 24.20, -0.2, '2026-03-12', 'Active large-cap growth fund'),
             ('US Treasury 10Y Benchmark', 'US10Y', 'Bond', 10.0, 980.00, 1025.00, 0.1, '2026-02-18', 'Fixed income sovereign capital preservation'),
             ('SPDR Gold Shares', 'GLD', 'Gold', 30.0, 195.00, 242.00, 0.6, '2026-01-25', 'Inflation hedge and precious metal reserve'),
             ('High-Yield Dollar Cash Reserve', 'CASH-USD', 'Cash', 1.0, 5000.00, 5000.00, 0.0, '2026-01-01', 'Emergency liquidity buffer')
@@ -385,9 +435,9 @@ def seed_user_investments_and_goals(user):
         holdings_spec = [
             ('HDFC Bank Ltd.', 'HDFCBANK', 'Equity', 120.0, 1480.00, 1720.00, 1.4, '2026-05-12', 'Private sector banking anchor holding'),
             ('Reliance Industries Ltd.', 'RELIANCE', 'Equity', 65.0, 2650.00, 2980.00, 0.9, '2026-06-05', 'Conglomerate energy retail and telecom'),
-            ('ICICI Prudential Bluechip Fund', 'ICICIBLUE', 'Mutual Fund', 1500.0, 82.50, 108.20, 0.5, '2026-03-15', 'Large-cap equity systematic SIP fund'),
-            ('SBI Balanced Advantage Fund', 'SBIBALADV', 'Mutual Fund', 2200.0, 38.00, 47.60, -0.3, '2026-04-10', 'Dynamic asset allocation balanced fund'),
-            ('Nippon India Growth Fund', 'NIPPONGROW', 'Mutual Fund', 180.0, 280.00, 365.00, 1.1, '2026-02-20', 'Mid-cap growth wealth compounder'),
+            ('ICICI Prudential Bluechip Fund', 'ICICIBLUE', ASSET_MUTUAL_FUND, 1500.0, 82.50, 108.20, 0.5, '2026-03-15', 'Large-cap equity systematic SIP fund'),
+            ('SBI Balanced Advantage Fund', 'SBIBALADV', ASSET_MUTUAL_FUND, 2200.0, 38.00, 47.60, -0.3, '2026-04-10', 'Dynamic asset allocation balanced fund'),
+            ('Nippon India Growth Fund', 'NIPPONGROW', ASSET_MUTUAL_FUND, 180.0, 280.00, 365.00, 1.1, '2026-02-20', 'Mid-cap growth wealth compounder'),
             ('HDFC Corporate Bond Debt Fund', 'HDFCCORP', 'Debt', 3500.0, 24.50, 27.80, 0.05, '2026-01-18', 'AAA-rated corporate debt fixed income'),
             ('Sovereign Gold Bond 2026 Series', 'SGB2026', 'Gold', 25.0, 6200.00, 7650.00, 0.7, '2026-01-10', 'RBI sovereign gold bond with 2.5% coupon'),
             ('Liquid Bank Cash Reserve', 'CASH-INR', 'Cash', 1.0, 125000.00, 125000.00, 0.0, '2026-01-01', 'Liquid short-term emergency buffer')
@@ -513,7 +563,7 @@ def init_seed_demo_accounts():
         {
             'fullname': 'Sarah Vance',
             'email': 'admin@finance.com',
-            'password': 'admin123',
+            'seed_secret': os.environ.get('DEMO_ADMIN_SECRET', 'admin123'),
             'role': 'admin',
             'business': 'FinSight Enterprise Holdings',
             'age': 36,
@@ -529,7 +579,7 @@ def init_seed_demo_accounts():
         {
             'fullname': 'Marcus Hayes',
             'email': 'shop@metrostore.com',
-            'password': 'shop123',
+            'seed_secret': os.environ.get('DEMO_SHOP_SECRET', 'shop123'),
             'role': 'shop_owner',
             'business': 'Metro Mart Superstore & Retail',
             'age': 42,
@@ -545,7 +595,7 @@ def init_seed_demo_accounts():
         {
             'fullname': 'Elena Rostova',
             'email': 'user@personal.com',
-            'password': 'user123',
+            'seed_secret': os.environ.get('DEMO_USER_SECRET', 'user123'),
             'role': 'user',
             'business': None,
             'age': 29,
@@ -566,7 +616,7 @@ def init_seed_demo_accounts():
             user = User(
                 fullname=spec['fullname'],
                 email=spec['email'],
-                password=generate_password_hash(spec['password']),
+                password=generate_password_hash(spec['seed_secret']),
                 role=spec['role'],
                 business_name=spec['business'],
                 age=spec['age'],
@@ -584,6 +634,45 @@ def init_seed_demo_accounts():
             seed_user_financial_profile(user)
         else:
             seed_user_investments_and_goals(existing)
+
+
+def _build_expense_donut(transactions):
+    expense_by_cat = {}
+    for t in transactions:
+        if t.txn_type == 'expense':
+            expense_by_cat[t.category] = expense_by_cat.get(t.category, 0.0) + t.amount
+
+    donut_labels = list(expense_by_cat.keys())
+    donut_data = [round(expense_by_cat[k], 2) for k in donut_labels]
+    donut_colors = [CHART_PALETTE[i % len(CHART_PALETTE)] for i in range(len(donut_labels))]
+
+    donut_items = []
+    tot_exp = sum(donut_data)
+    for idx, name in enumerate(donut_labels):
+        val = donut_data[idx]
+        pct = round((val / tot_exp * 100), 1) if tot_exp > 0 else 0
+        donut_items.append({'name': name, 'amount': val, 'pct': pct, 'color': donut_colors[idx]})
+
+    donut_items.sort(key=lambda x: x['amount'], reverse=True)
+    return donut_labels, donut_data, donut_colors, donut_items
+
+
+def _build_monthly_trends(transactions):
+    months = get_last_6_months()
+    income_by_month = {m['key']: 0.0 for m in months}
+    expense_by_month = {m['key']: 0.0 for m in months}
+
+    for t in transactions:
+        mo_key = t.date[:7]
+        if mo_key in income_by_month and t.txn_type == 'income':
+            income_by_month[mo_key] += t.amount
+        elif mo_key in expense_by_month and t.txn_type == 'expense':
+            expense_by_month[mo_key] += t.amount
+
+    trend_labels = [m['short_label'] for m in months]
+    trend_income = [round(income_by_month[m['key']], 2) for m in months]
+    trend_expense = [round(expense_by_month[m['key']], 2) for m in months]
+    return trend_labels, trend_income, trend_expense
 
 
 @app.route('/')
@@ -612,47 +701,14 @@ def dashboard():
     budget_utilization = round((total_budget_spent / total_allocated * 100), 1) if total_allocated > 0 else 0.0
     budget_variance = round(total_allocated - total_budget_spent, 2)
 
-    expense_by_cat = {}
-    for t in transactions:
-        if t.txn_type == 'expense':
-            expense_by_cat[t.category] = expense_by_cat.get(t.category, 0.0) + t.amount
-
-    palette = ['#1a56db', '#f97316', '#10b981', '#6366f1', '#ec4899', '#8b5cf6', '#14b8a6', '#f59e0b', '#06b6d4', '#64748b']
-    donut_labels = list(expense_by_cat.keys())
-    donut_data = [round(expense_by_cat[k], 2) for k in donut_labels]
-    donut_colors = [palette[i % len(palette)] for i in range(len(donut_labels))]
-    
-    donut_items = []
-    tot_exp = sum(donut_data)
-    for idx, name in enumerate(donut_labels):
-        val = donut_data[idx]
-        pct = round((val / tot_exp * 100), 1) if tot_exp > 0 else 0
-        donut_items.append({'name': name, 'amount': val, 'pct': pct, 'color': donut_colors[idx]})
-
-    donut_items.sort(key=lambda x: x['amount'], reverse=True)
-
-    months = get_last_6_months()
-    income_by_month = {m['key']: 0.0 for m in months}
-    expense_by_month = {m['key']: 0.0 for m in months}
-
-    for t in transactions:
-        mo_key = t.date[:7]
-        if mo_key in income_by_month and t.txn_type == 'income':
-            income_by_month[mo_key] += t.amount
-        elif mo_key in expense_by_month and t.txn_type == 'expense':
-            expense_by_month[mo_key] += t.amount
-
-    trend_labels = [m['short_label'] for m in months]
-    trend_income = [round(income_by_month[m['key']], 2) for m in months]
-    trend_expense = [round(expense_by_month[m['key']], 2) for m in months]
-
-    recent_transactions = transactions[:8]
+    donut_labels, donut_data, donut_colors, donut_items = _build_expense_donut(transactions)
+    trend_labels, trend_income, trend_expense = _build_monthly_trends(transactions)
 
     return render_template(
         'dashboard.html',
         active_page='dashboard',
         page_title='Dashboard',
-        transactions=recent_transactions,
+        transactions=transactions[:8],
         budgets=budgets,
         accounts=accounts,
         total_income=total_income,
@@ -695,8 +751,8 @@ def expenses():
     total_expense = sum(t.amount for t in all_expenses)
     avg_expense = (total_expense / len(all_expenses)) if all_expenses else 0.0
 
-    categories = sorted(list(set(t.category for t in all_expenses)))
-    payment_modes = sorted(list(set(t.payment_mode for t in all_expenses if t.payment_mode)))
+    categories = sorted({t.category for t in all_expenses})
+    payment_modes = sorted({t.payment_mode for t in all_expenses if t.payment_mode})
 
     top_cat = 'None'
     if all_expenses:
@@ -746,8 +802,8 @@ def income():
     total_income = sum(t.amount for t in all_incomes)
     avg_income = (total_income / len(all_incomes)) if all_incomes else 0.0
 
-    categories = sorted(list(set(t.category for t in all_incomes)))
-    payment_modes = sorted(list(set(t.payment_mode for t in all_incomes if t.payment_mode)))
+    categories = sorted({t.category for t in all_incomes})
+    payment_modes = sorted({t.payment_mode for t in all_incomes if t.payment_mode})
 
     top_source = 'None'
     if all_incomes:
@@ -779,7 +835,7 @@ def income():
 @login_required
 def budgets():
     budgets_list = BudgetCategory.query.filter_by(user_id=current_user.id).all()
-    
+
     monthly_budgets = [b for b in budgets_list if b.period == 'Monthly']
     yearly_budgets = [b for b in budgets_list if b.period == 'Yearly']
 
@@ -907,7 +963,7 @@ def accounts():
     accounts_list = Account.query.filter_by(user_id=current_user.id).all()
     total_balance = sum(a.balance for a in accounts_list)
     bank_balance = sum(a.balance for a in accounts_list if a.account_type == 'Bank')
-    card_balance = sum(a.balance for a in accounts_list if a.account_type == 'Credit Card')
+    card_balance = sum(a.balance for a in accounts_list if a.account_type == PAY_CREDIT_CARD)
     wallet_balance = sum(a.balance for a in accounts_list if a.account_type in ['Wallet', 'Cash'])
 
     return render_template(
@@ -978,7 +1034,6 @@ def categories():
             cat_stats[t.category]['modes'].add(t.payment_mode)
 
     cat_rows = []
-    palette = ['#1a56db', '#f97316', '#10b981', '#6366f1', '#ec4899', '#8b5cf6', '#14b8a6', '#f59e0b', '#06b6d4', '#64748b']
     for idx, (cat_name, data) in enumerate(cat_stats.items()):
         pct = round((data['total'] / total_spent * 100), 1) if total_spent > 0 else 0.0
         avg_txn = round(data['total'] / data['count'], 2) if data['count'] > 0 else 0.0
@@ -989,7 +1044,7 @@ def categories():
             'pct': pct,
             'avg': avg_txn,
             'modes': ', '.join(sorted(data['modes'])),
-            'color': palette[idx % len(palette)]
+            'color': CHART_PALETTE[idx % len(CHART_PALETTE)]
         })
 
     cat_rows.sort(key=lambda x: x['total'], reverse=True)
@@ -1063,6 +1118,104 @@ def export_csv():
     )
 
 
+def _classify_allocation_hint(diff):
+    if diff > 3.0:
+        return 'Overweight'
+    if diff < -3.0:
+        return 'Underweight'
+    return 'Balanced'
+
+
+def _build_allocation_breakdown(inv_list, total_portfolio_value):
+    allocation_map = {}
+    for i in inv_list:
+        allocation_map[i.asset_type] = allocation_map.get(i.asset_type, 0.0) + i.current_value
+
+    target_alloc_map = {
+        'Equity': 45.0,
+        ASSET_MUTUAL_FUND: 25.0,
+        'ETF': 10.0,
+        'Debt': 10.0,
+        'Bond': 10.0,
+        'Gold': 5.0,
+        'Cash': 5.0,
+        'Other': 5.0
+    }
+    breakdown = []
+    for asset_type, val in sorted(allocation_map.items(), key=lambda x: x[1], reverse=True):
+        share_pct = round((val / total_portfolio_value) * 100, 1) if total_portfolio_value > 0 else 0.0
+        tgt_pct = target_alloc_map.get(asset_type, 10.0)
+        diff = round(share_pct - tgt_pct, 1)
+        breakdown.append({
+            'type': asset_type,
+            'value': round(val, 2),
+            'share_pct': share_pct,
+            'target_pct': tgt_pct,
+            'diff': diff,
+            'hint': _classify_allocation_hint(diff)
+        })
+    return breakdown
+
+
+def _determine_risk_profile(allocation_breakdown):
+    growth_pct = sum(
+        item['share_pct'] for item in allocation_breakdown
+        if item['type'] in ['Equity', ASSET_MUTUAL_FUND, 'ETF']
+    )
+    if growth_pct >= 65.0:
+        return 'Aggressive'
+    if growth_pct >= 35.0:
+        return 'Moderate'
+    return 'Conservative'
+
+
+def _build_investment_txns_history(inv_list, user_id):
+    txns_history = []
+    for inv in inv_list:
+        txns_history.append({
+            'date': inv.purchase_date,
+            'type': 'Purchase',
+            'instrument': inv.asset_name,
+            'category': inv.asset_type,
+            'quantity': inv.quantity,
+            'price': inv.purchase_price,
+            'total': inv.invested_value,
+            'notes': inv.notes or 'Initial portfolio asset acquisition'
+        })
+    for g in Goal.query.filter_by(user_id=user_id).all():
+        for ct in g.contributions:
+            txns_history.append({
+                'date': ct.date,
+                'type': 'Goal Contribution',
+                'instrument': g.goal_name,
+                'category': f"Goal: {g.goal_type}",
+                'quantity': 1.0,
+                'price': ct.amount,
+                'total': ct.amount,
+                'notes': ct.notes or f"Contribution to {g.goal_name}"
+            })
+    txns_history.sort(key=lambda x: x['date'], reverse=True)
+    return txns_history
+
+
+def _record_portfolio_snapshot(user_id, inv_id):
+    all_inv = Investment.query.filter_by(user_id=user_id).all()
+    tot_val = sum(i.current_value for i in all_inv)
+    tot_inv = sum(i.invested_value for i in all_inv)
+    ret_pct = round(((tot_val - tot_inv) / tot_inv) * 100, 2) if tot_inv > 0 else 0.0
+    ph = PortfolioHistory(
+        user_id=user_id,
+        investment_id=inv_id,
+        date=datetime.now().strftime('%Y-%m-%d'),
+        invested_total=tot_inv,
+        portfolio_value=tot_val,
+        portfolio_return_pct=ret_pct,
+        benchmark_return_pct=12.5
+    )
+    db.session.add(ph)
+    db.session.commit()
+
+
 @app.route('/investments')
 @login_required
 def investments():
@@ -1079,35 +1232,7 @@ def investments():
     today_change_value = round(sum(i.day_change_value for i in inv_list), 2)
     today_change_pct = round((today_change_value / total_portfolio_value) * 100, 2) if total_portfolio_value > 0 else 0.0
 
-    allocation_map = {}
-    for i in inv_list:
-        allocation_map[i.asset_type] = allocation_map.get(i.asset_type, 0.0) + i.current_value
-
-    allocation_breakdown = []
-    target_alloc_map = {
-        'Equity': 45.0,
-        'Mutual Fund': 25.0,
-        'ETF': 10.0,
-        'Debt': 10.0,
-        'Bond': 10.0,
-        'Gold': 5.0,
-        'Cash': 5.0,
-        'Other': 5.0
-    }
-    for asset_type, val in sorted(allocation_map.items(), key=lambda x: x[1], reverse=True):
-        share_pct = round((val / total_portfolio_value) * 100, 1) if total_portfolio_value > 0 else 0.0
-        tgt_pct = target_alloc_map.get(asset_type, 10.0)
-        diff = round(share_pct - tgt_pct, 1)
-        hint = 'Overweight' if diff > 3.0 else ('Underweight' if diff < -3.0 else 'Balanced')
-        allocation_breakdown.append({
-            'type': asset_type,
-            'value': round(val, 2),
-            'share_pct': share_pct,
-            'target_pct': tgt_pct,
-            'diff': diff,
-            'hint': hint
-        })
-
+    allocation_breakdown = _build_allocation_breakdown(inv_list, total_portfolio_value)
     history_records = PortfolioHistory.query.filter_by(user_id=current_user.id).order_by(PortfolioHistory.date.asc()).all()
     if not history_records:
         history_records = [
@@ -1128,45 +1253,13 @@ def investments():
 
     top_holdings = sorted(inv_list, key=lambda x: x.current_value, reverse=True)[:5]
     user_goals = Goal.query.filter_by(user_id=current_user.id).order_by(Goal.target_date.asc()).limit(4).all()
-
-    equity_and_mf_pct = sum(item['share_pct'] for item in allocation_breakdown if item['type'] in ['Equity', 'Mutual Fund', 'ETF'])
-    if equity_and_mf_pct >= 65.0:
-        risk_profile = 'Aggressive'
-    elif equity_and_mf_pct >= 35.0:
-        risk_profile = 'Moderate'
-    else:
-        risk_profile = 'Conservative'
+    risk_profile = _determine_risk_profile(allocation_breakdown)
 
     latest_bench = chart_benchmark_returns[-1] if chart_benchmark_returns else 12.0
     portfolio_alpha = round(overall_return_pct - latest_bench, 2)
     top_gainer = max(inv_list, key=lambda x: x.return_pct) if inv_list else None
     top_laggard = min(inv_list, key=lambda x: x.return_pct) if inv_list else None
-
-    txns_history = []
-    for inv in inv_list:
-        txns_history.append({
-            'date': inv.purchase_date,
-            'type': 'Purchase',
-            'instrument': inv.asset_name,
-            'category': inv.asset_type,
-            'quantity': inv.quantity,
-            'price': inv.purchase_price,
-            'total': inv.invested_value,
-            'notes': inv.notes or 'Initial portfolio asset acquisition'
-        })
-    for g in Goal.query.filter_by(user_id=current_user.id).all():
-        for ct in g.contributions:
-            txns_history.append({
-                'date': ct.date,
-                'type': 'Goal Contribution',
-                'instrument': g.goal_name,
-                'category': f"Goal: {g.goal_type}",
-                'quantity': 1.0,
-                'price': ct.amount,
-                'total': ct.amount,
-                'notes': ct.notes or f"Contribution to {g.goal_name}"
-            })
-    txns_history.sort(key=lambda x: x['date'], reverse=True)
+    txns_history = _build_investment_txns_history(inv_list, current_user.id)
 
     return render_template(
         'investments.html',
@@ -1236,23 +1329,7 @@ def add_investment():
         )
         db.session.add(inv)
         db.session.commit()
-
-        all_inv = Investment.query.filter_by(user_id=current_user.id).all()
-        tot_val = sum(i.current_value for i in all_inv)
-        tot_inv = sum(i.invested_value for i in all_inv)
-        ret_pct = round(((tot_val - tot_inv) / tot_inv) * 100, 2) if tot_inv > 0 else 0.0
-        ph = PortfolioHistory(
-            user_id=current_user.id,
-            investment_id=inv.id,
-            date=datetime.now().strftime('%Y-%m-%d'),
-            invested_total=tot_inv,
-            portfolio_value=tot_val,
-            portfolio_return_pct=ret_pct,
-            benchmark_return_pct=12.5
-        )
-        db.session.add(ph)
-        db.session.commit()
-
+        _record_portfolio_snapshot(current_user.id, inv.id)
         flash(f'Investment holding {asset_name} added to portfolio successfully!', 'success')
     except ValueError:
         flash('Please enter valid numeric figures for financial fields.', 'danger')
@@ -1265,7 +1342,7 @@ def add_investment():
 def edit_investment(inv_id):
     inv = db.session.get(Investment, inv_id)
     if not inv or inv.user_id != current_user.id:
-        flash('Investment holding not found or unauthorized access.', 'danger')
+        flash(ERR_INV_NOT_FOUND, 'danger')
         return redirect(url_for('investments', tab='holdings'))
 
     qty_str = request.form.get('quantity', str(inv.quantity)).strip()
@@ -1281,23 +1358,7 @@ def edit_investment(inv_id):
         inv.day_change_pct = float(day_str)
         inv.notes = notes if notes else None
         db.session.commit()
-
-        all_inv = Investment.query.filter_by(user_id=current_user.id).all()
-        tot_val = sum(i.current_value for i in all_inv)
-        tot_inv = sum(i.invested_value for i in all_inv)
-        ret_pct = round(((tot_val - tot_inv) / tot_inv) * 100, 2) if tot_inv > 0 else 0.0
-        ph = PortfolioHistory(
-            user_id=current_user.id,
-            investment_id=inv.id,
-            date=datetime.now().strftime('%Y-%m-%d'),
-            invested_total=tot_inv,
-            portfolio_value=tot_val,
-            portfolio_return_pct=ret_pct,
-            benchmark_return_pct=12.5
-        )
-        db.session.add(ph)
-        db.session.commit()
-
+        _record_portfolio_snapshot(current_user.id, inv.id)
         flash(f'Holding {inv.asset_name} market parameters updated successfully!', 'success')
     except ValueError:
         flash('Please enter valid numeric figures for financial fields.', 'danger')
@@ -1310,7 +1371,7 @@ def edit_investment(inv_id):
 def delete_investment(inv_id):
     inv = db.session.get(Investment, inv_id)
     if not inv or inv.user_id != current_user.id:
-        flash('Investment holding not found or unauthorized access.', 'danger')
+        flash(ERR_INV_NOT_FOUND, 'danger')
         return redirect(url_for('investments', tab='holdings'))
 
     name = inv.asset_name
@@ -1460,7 +1521,7 @@ def add_goal():
 def edit_goal(goal_id):
     goal = db.session.get(Goal, goal_id)
     if not goal or goal.user_id != current_user.id:
-        flash('Financial goal not found or unauthorized access.', 'danger')
+        flash(ERR_GOAL_NOT_FOUND, 'danger')
         return redirect(url_for('goals'))
 
     goal_name = request.form.get('goal_name', goal.goal_name).strip()
@@ -1491,7 +1552,7 @@ def edit_goal(goal_id):
 def contribute_goal(goal_id):
     goal = db.session.get(Goal, goal_id)
     if not goal or goal.user_id != current_user.id:
-        flash('Financial goal not found or unauthorized access.', 'danger')
+        flash(ERR_GOAL_NOT_FOUND, 'danger')
         return redirect(url_for('goals'))
 
     amount_str = request.form.get('amount', '0').strip()
@@ -1527,7 +1588,7 @@ def contribute_goal(goal_id):
                     category='Savings & Goals',
                     amount=amount,
                     txn_type='expense',
-                    payment_mode='Bank Transfer',
+                    payment_mode=PAY_BANK_TRANSFER,
                     date=date_val,
                     status='Completed',
                     notes=notes or f"Fund transfer to {goal.goal_name}"
@@ -1549,7 +1610,7 @@ def contribute_goal(goal_id):
 def delete_goal(goal_id):
     goal = db.session.get(Goal, goal_id)
     if not goal or goal.user_id != current_user.id:
-        flash('Financial goal not found or unauthorized access.', 'danger')
+        flash(ERR_GOAL_NOT_FOUND, 'danger')
         return redirect(url_for('goals'))
 
     name = goal.goal_name
@@ -1570,6 +1631,44 @@ def settings():
     )
 
 
+def _validate_profile_contact(fullname, email, phone, country, user_id):
+    if not fullname:
+        return 'Full name is required.', None
+    if not email or not validate_email_format(email):
+        return 'Valid email address is required.', None
+    if User.query.filter(User.email == email, User.id != user_id).first():
+        return 'This email address is already in use by another account.', None
+
+    is_valid_phone, formatted_phone = validate_phone(phone, country)
+    if not is_valid_phone:
+        if country == 'India':
+            return 'Please enter a valid 10-digit Indian phone number starting with 6, 7, 8, or 9.', None
+        return 'Please enter a valid international phone number (7 to 15 digits).', None
+    return None, formatted_phone
+
+
+def _parse_profile_age(age_str, default_age):
+    if not age_str:
+        return default_age, None
+    try:
+        val = int(age_str)
+        if 18 <= val <= 110:
+            return val, None
+        return default_age, 'Age must be between 18 and 110.'
+    except ValueError:
+        return default_age, 'Invalid numeric age.'
+
+
+def _parse_profile_income(income_str, default_income):
+    if not income_str:
+        return default_income
+    try:
+        val = float(income_str)
+        return val if val >= 0 else default_income
+    except ValueError:
+        return default_income
+
+
 @app.route('/settings/profile', methods=['POST'])
 @login_required
 def update_profile():
@@ -1585,48 +1684,15 @@ def update_profile():
     income_sources = request.form.get('income_sources', '').strip()
     financial_preferences = request.form.get('financial_preferences', '').strip()
 
-    if not fullname:
-        flash('Full name is required.', 'danger')
+    contact_err, formatted_phone = _validate_profile_contact(fullname, email, phone, country, current_user.id)
+    if contact_err:
+        flash(contact_err, 'danger')
         return redirect(url_for('settings'))
 
-    if not email or not validate_email_format(email):
-        flash('Valid email address is required.', 'danger')
+    age, age_err = _parse_profile_age(age_str, current_user.age)
+    if age_err:
+        flash(age_err, 'danger')
         return redirect(url_for('settings'))
-
-    existing = User.query.filter(User.email == email, User.id != current_user.id).first()
-    if existing:
-        flash('This email address is already in use by another account.', 'danger')
-        return redirect(url_for('settings'))
-
-    is_valid_phone, formatted_phone = validate_phone(phone, country)
-    if not is_valid_phone:
-        if country == 'India':
-            flash('Please enter a valid 10-digit Indian phone number starting with 6, 7, 8, or 9.', 'danger')
-        else:
-            flash('Please enter a valid international phone number (7 to 15 digits).', 'danger')
-        return redirect(url_for('settings'))
-
-    age = current_user.age
-    if age_str:
-        try:
-            val = int(age_str)
-            if 18 <= val <= 110:
-                age = val
-            else:
-                flash('Age must be between 18 and 110.', 'danger')
-                return redirect(url_for('settings'))
-        except ValueError:
-            flash('Invalid numeric age.', 'danger')
-            return redirect(url_for('settings'))
-
-    total_income = current_user.total_income
-    if income_str:
-        try:
-            val = float(income_str)
-            if val >= 0:
-                total_income = val
-        except ValueError:
-            pass
 
     current_user.fullname = fullname
     current_user.email = email
@@ -1637,7 +1703,7 @@ def update_profile():
     current_user.address = address
     current_user.age = age
     current_user.business_name = biz_name if biz_name else None
-    current_user.total_income = total_income
+    current_user.total_income = _parse_profile_income(income_str, current_user.total_income)
     current_user.income_sources = income_sources
     current_user.financial_preferences = financial_preferences
 
@@ -1690,6 +1756,39 @@ def toggle_theme():
     return redirect(request.referrer or url_for('dashboard'))
 
 
+def _parse_optional_int(val_str):
+    if not val_str:
+        return None
+    try:
+        return int(val_str)
+    except ValueError:
+        return None
+
+
+def _apply_transaction_side_effects(user_id, account_id, category, txn_type, amount):
+    if account_id:
+        acc = Account.query.filter_by(id=account_id, user_id=user_id).first()
+        if acc:
+            acc.balance += amount if txn_type == 'income' else -amount
+
+    if txn_type == 'expense':
+        matched_budget = BudgetCategory.query.filter_by(user_id=user_id, name=category).first()
+        if matched_budget:
+            matched_budget.spent += amount
+
+
+def _revert_transaction_side_effects(user_id, txn):
+    if txn.account_id:
+        acc = Account.query.filter_by(id=txn.account_id, user_id=user_id).first()
+        if acc:
+            acc.balance += -txn.amount if txn.txn_type == 'income' else txn.amount
+
+    if txn.txn_type == 'expense':
+        matched_budget = BudgetCategory.query.filter_by(user_id=user_id, name=txn.category).first()
+        if matched_budget:
+            matched_budget.spent = max(0.0, matched_budget.spent - txn.amount)
+
+
 @app.route('/add-transaction', methods=['POST'])
 @login_required
 def add_transaction():
@@ -1715,13 +1814,7 @@ def add_transaction():
         flash('Transaction title and category are required.', 'danger')
         return redirect(request.referrer or url_for('dashboard'))
 
-    account_id = None
-    if account_id_str:
-        try:
-            account_id = int(account_id_str)
-        except ValueError:
-            pass
-
+    account_id = _parse_optional_int(account_id_str)
     new_txn = Transaction(
         user_id=current_user.id,
         account_id=account_id,
@@ -1735,19 +1828,7 @@ def add_transaction():
         notes=notes
     )
     db.session.add(new_txn)
-
-    if account_id:
-        acc = Account.query.filter_by(id=account_id, user_id=current_user.id).first()
-        if acc:
-            if txn_type == 'income':
-                acc.balance += amount
-            else:
-                acc.balance -= amount
-
-    if txn_type == 'expense':
-        matched_budget = BudgetCategory.query.filter_by(user_id=current_user.id, name=category).first()
-        if matched_budget:
-            matched_budget.spent += amount
+    _apply_transaction_side_effects(current_user.id, account_id, category, txn_type, amount)
 
     db.session.commit()
     _, sym = get_user_currency_info()
@@ -1760,23 +1841,66 @@ def add_transaction():
 def delete_transaction(txn_id):
     txn = Transaction.query.filter_by(id=txn_id, user_id=current_user.id).first()
     if txn:
-        if txn.account_id:
-            acc = Account.query.filter_by(id=txn.account_id, user_id=current_user.id).first()
-            if acc:
-                if txn.txn_type == 'income':
-                    acc.balance -= txn.amount
-                else:
-                    acc.balance += txn.amount
-
-        if txn.txn_type == 'expense':
-            matched_budget = BudgetCategory.query.filter_by(user_id=current_user.id, name=txn.category).first()
-            if matched_budget:
-                matched_budget.spent = max(0.0, matched_budget.spent - txn.amount)
-
+        _revert_transaction_side_effects(current_user.id, txn)
         db.session.delete(txn)
         db.session.commit()
         flash('Transaction removed from financial ledger.', 'info')
     return redirect(request.referrer or url_for('dashboard'))
+
+
+def _validate_reg_contact(fullname, email, phone, country):
+    if not fullname:
+        return 'Full name is required.', phone
+    if not email:
+        return 'Email address is required.', phone
+    if not validate_email_format(email):
+        return 'Please enter a valid email address format (e.g. name@company.com).', phone
+    if not phone:
+        return 'Phone number is required.', phone
+
+    is_valid_phone, formatted_phone = validate_phone(phone, country)
+    if not is_valid_phone:
+        if country == 'India':
+            return 'Please enter a valid 10-digit Indian phone number starting with 6, 7, 8, or 9.', phone
+        return 'Please enter a valid international phone number (7 to 15 digits).', phone
+    return None, (formatted_phone if formatted_phone is not None else phone)
+
+
+def _validate_reg_credentials(address, role, business_name, password, confirm_password, email):
+    if not address:
+        return 'Residential / Business address is required.'
+    if role not in ['user', 'shop_owner', 'admin']:
+        return 'Please select a valid account role.'
+    if role == 'shop_owner' and not business_name:
+        return 'Shop or business name is required for Shop Owner accounts.'
+    if len(password) < 8:
+        return 'Password must be at least 8 characters long.'
+    if password != confirm_password:
+        return 'Passwords do not match.'
+    if User.query.filter_by(email=email).first():
+        return 'An account with this email is already registered.'
+    return None
+
+
+def _parse_reg_age_and_income(age_str, income_str):
+    age = None
+    if age_str:
+        try:
+            age = int(age_str)
+            if age < 18 or age > 110:
+                return None, 0.0, 'Age must be between 18 and 110 years.'
+        except ValueError:
+            return None, 0.0, 'Please enter a valid numeric age.'
+
+    total_income = 0.0
+    if income_str:
+        try:
+            total_income = float(income_str)
+            if total_income < 0:
+                return age, 0.0, 'Total income cannot be negative.'
+        except ValueError:
+            return age, 0.0, 'Please enter a valid numeric total income amount.'
+    return age, total_income, None
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -1785,71 +1909,26 @@ def register():
         return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
-        fullname         = request.form.get('fullname', '').strip()
-        email            = request.form.get('email', '').strip().lower()
-        role             = request.form.get('role', 'user').strip()
-        business_name    = request.form.get('business_name', '').strip()
-        
-        country          = request.form.get('country', 'India').strip()
-        currency         = request.form.get('currency', 'INR').strip()
-        age_str          = request.form.get('age', '').strip()
-        phone            = request.form.get('phone', '').strip()
-        address          = request.form.get('address', '').strip()
-        income_str       = request.form.get('total_income', '0').strip()
-
-        password         = request.form.get('password', '')
+        fullname = request.form.get('fullname', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        role = request.form.get('role', 'user').strip()
+        business_name = request.form.get('business_name', '').strip()
+        country = request.form.get('country', 'India').strip()
+        currency = request.form.get('currency', 'INR').strip()
+        age_str = request.form.get('age', '').strip()
+        phone = request.form.get('phone', '').strip()
+        address = request.form.get('address', '').strip()
+        income_str = request.form.get('total_income', '0').strip()
+        password = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
 
-        error = None
-        if not fullname:
-            error = 'Full name is required.'
-        elif not email:
-            error = 'Email address is required.'
-        elif not validate_email_format(email):
-            error = 'Please enter a valid email address format (e.g. name@company.com).'
-        elif not phone:
-            error = 'Phone number is required.'
-        else:
-            is_valid_phone, formatted_phone = validate_phone(phone, country)
-            if not is_valid_phone:
-                if country == 'India':
-                    error = 'Please enter a valid 10-digit Indian phone number starting with 6, 7, 8, or 9.'
-                else:
-                    error = 'Please enter a valid international phone number (7 to 15 digits).'
-            elif formatted_phone is not None:
-                phone = formatted_phone
-
+        error, phone = _validate_reg_contact(fullname, email, phone, country)
         if not error:
-            if not address:
-                error = 'Residential / Business address is required.'
-            elif role not in ['user', 'shop_owner', 'admin']:
-                error = 'Please select a valid account role.'
-            elif role == 'shop_owner' and not business_name:
-                error = 'Shop or business name is required for Shop Owner accounts.'
-            elif len(password) < 8:
-                error = 'Password must be at least 8 characters long.'
-            elif password != confirm_password:
-                error = 'Passwords do not match.'
-            elif User.query.filter_by(email=email).first():
-                error = 'An account with this email is already registered.'
+            error = _validate_reg_credentials(address, role, business_name, password, confirm_password, email)
 
-        age = None
-        if not error and age_str:
-            try:
-                age = int(age_str)
-                if age < 18 or age > 110:
-                    error = 'Age must be between 18 and 110 years.'
-            except ValueError:
-                error = 'Please enter a valid numeric age.'
-
-        total_income = 0.0
-        if not error and income_str:
-            try:
-                total_income = float(income_str)
-                if total_income < 0:
-                    error = 'Total income cannot be negative.'
-            except ValueError:
-                error = 'Please enter a valid numeric total income amount.'
+        age, total_income = None, 0.0
+        if not error:
+            age, total_income, error = _parse_reg_age_and_income(age_str, income_str)
 
         if currency not in CURRENCIES:
             currency = 'INR'
@@ -1860,7 +1939,7 @@ def register():
                 'register.html',
                 fullname=fullname,
                 email=email,
-                role=role,
+                selected_role=role,
                 business_name=business_name,
                 country=country,
                 currency=currency,
@@ -1870,11 +1949,10 @@ def register():
                 total_income=income_str
             )
 
-        hashed_pw = generate_password_hash(password)
         new_user = User(
             fullname=fullname,
             email=email,
-            password=hashed_pw,
+            password=generate_password_hash(password),
             role=role,
             business_name=business_name if business_name else None,
             country=country,
@@ -1887,7 +1965,6 @@ def register():
         )
         db.session.add(new_user)
         db.session.commit()
-
         seed_user_financial_profile(new_user)
 
         flash('Your FinSight account has been registered successfully! You may now sign in.', 'success')
@@ -1897,7 +1974,7 @@ def register():
         'register.html',
         fullname='',
         email='',
-        role='user',
+        selected_role='user',
         business_name='',
         country='India',
         currency='INR',
@@ -1908,50 +1985,51 @@ def register():
     )
 
 
+def _authenticate_login(email, password, role, client_key):
+    if is_login_rate_limited(client_key):
+        return None, 'Too many failed sign-in attempts. For your security, please wait 60 seconds before trying again.'
+    if not email or not validate_email_format(email):
+        return None, 'Please enter a valid email address format (e.g. name@company.com).'
+    if not password:
+        return None, 'Password is required.'
+
+    user = User.query.filter_by(email=email).first()
+    if not user or not check_password_hash(user.password, password):
+        record_failed_login(client_key)
+        return None, 'Invalid email or password combination. Please try again.'
+
+    if user.role != role:
+        record_failed_login(client_key)
+        role_labels = {'admin': 'Administrator', 'shop_owner': 'Shop Owner', 'user': 'Standard User'}
+        selected_label = role_labels.get(role, role)
+        return None, f'Account role mismatch: Your account is registered as "{user.role_title}", not "{selected_label}". Please select the correct login type.'
+
+    return user, None
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
-        email       = request.form.get('email', '').strip().lower()
-        password    = request.form.get('password', '')
-        role        = request.form.get('role', 'user').strip()
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        role = request.form.get('role', 'user').strip()
         remember_me = 'remember_me' in request.form
 
         client_key = request.remote_addr or email
-        if is_login_rate_limited(client_key):
-            flash('Too many failed sign-in attempts. For your security, please wait 60 seconds before trying again.', 'danger')
-            return render_template('login.html', email=email, role=role)
-
-        if not email or not validate_email_format(email):
-            flash('Please enter a valid email address format (e.g. name@company.com).', 'danger')
-            return render_template('login.html', email=email, role=role)
-
-        if not password:
-            flash('Password is required.', 'danger')
-            return render_template('login.html', email=email, role=role)
-
-        user = User.query.filter_by(email=email).first()
-
-        if not user or not check_password_hash(user.password, password):
-            record_failed_login(client_key)
-            flash('Invalid email or password combination. Please try again.', 'danger')
-            return render_template('login.html', email=email, role=role)
-
-        if user.role != role:
-            record_failed_login(client_key)
-            role_labels = {'admin': 'Administrator', 'shop_owner': 'Shop Owner', 'user': 'Standard User'}
-            selected_label = role_labels.get(role, role)
-            flash(f'Account role mismatch: Your account is registered as "{user.role_title}", not "{selected_label}". Please select the correct login type.', 'danger')
-            return render_template('login.html', email=email, role=role)
+        user, error = _authenticate_login(email, password, role, client_key)
+        if error or not user:
+            flash(error or 'Unable to sign in.', 'danger')
+            return render_template(TPL_LOGIN, email=email, selected_role=role)
 
         clear_failed_logins(client_key)
         login_user(user, remember=remember_me)
         next_page = request.args.get('next')
         return redirect(next_page or url_for('dashboard'))
 
-    return render_template('login.html', email='', role='user')
+    return render_template(TPL_LOGIN, email='', selected_role='user')
 
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
@@ -1963,19 +2041,18 @@ def forgot_password():
         email = request.form.get('email', '').strip().lower()
         if not email or not validate_email_format(email):
             flash('Please enter a valid email address format.', 'danger')
-            return render_template('forgot_password.html', email=email, reset_url=None)
+            return render_template(TPL_FORGOT_PW, email=email, reset_url=None)
 
         user = User.query.filter_by(email=email).first()
         if user:
             token = reset_serializer.dumps(user.email, salt='fintech-password-reset')
             reset_url = url_for('reset_password', token=token, _external=True)
             flash(f'Password reset token generated. Verification link: {reset_url}', 'info')
-            return render_template('forgot_password.html', email=email, reset_url=reset_url)
-        else:
-            flash('If an account is associated with this email, a reset verification token has been issued.', 'info')
-            return render_template('forgot_password.html', email=email, reset_url=None)
+            return render_template(TPL_FORGOT_PW, email=email, reset_url=reset_url)
+        flash('If an account is associated with this email, a reset verification token has been issued.', 'info')
+        return render_template(TPL_FORGOT_PW, email=email, reset_url=None)
 
-    return render_template('forgot_password.html', email='', reset_url=None)
+    return render_template(TPL_FORGOT_PW, email='', reset_url=None)
 
 
 @app.route('/reset-password/<token>', methods=['GET', 'POST'])
@@ -2000,18 +2077,18 @@ def reset_password(token):
 
         if len(password) < 8:
             flash('New password must be at least 8 characters long.', 'danger')
-            return render_template('reset_password.html', token=token, email=email)
+            return render_template(TPL_RESET_PW, token=token, email=email)
 
         if password != confirm_password:
             flash('Passwords do not match.', 'danger')
-            return render_template('reset_password.html', token=token, email=email)
+            return render_template(TPL_RESET_PW, token=token, email=email)
 
         user.password = generate_password_hash(password)
         db.session.commit()
         flash('Your password has been reset successfully. Please sign in with your new credentials.', 'success')
         return redirect(url_for('login'))
 
-    return render_template('reset_password.html', token=token, email=email)
+    return render_template(TPL_RESET_PW, token=token, email=email)
 
 
 @app.route('/logout')

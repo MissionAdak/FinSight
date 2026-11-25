@@ -5,6 +5,9 @@ from flask_login import UserMixin
 
 db = SQLAlchemy()
 
+CASCADE_ALL_DELETE_ORPHAN = 'all, delete-orphan'
+USERS_ID_FK = 'users.id'
+
 
 class BaseModel(db.Model):
     __abstract__ = True
@@ -26,7 +29,7 @@ class User(UserMixin, BaseModel):
     password              = db.Column(db.String(256), nullable=False)
     role                  = db.Column(db.String(50), nullable=False, default='user')
     business_name         = db.Column(db.String(150), nullable=True)
-    
+
     age                   = db.Column(db.Integer, nullable=True)
     phone                 = db.Column(db.String(30), nullable=True)
     address               = db.Column(db.String(300), nullable=True)
@@ -40,12 +43,12 @@ class User(UserMixin, BaseModel):
 
     created_at            = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-    transactions          = db.relationship('Transaction', backref='user', cascade="all, delete-orphan", lazy=True)
-    budgets               = db.relationship('BudgetCategory', backref='user', cascade="all, delete-orphan", lazy=True)
-    accounts              = db.relationship('Account', backref='user', cascade="all, delete-orphan", lazy=True)
-    investments           = db.relationship('Investment', backref='user', cascade="all, delete-orphan", lazy=True)
-    portfolio_history     = db.relationship('PortfolioHistory', backref='user', cascade="all, delete-orphan", lazy=True)
-    goals                 = db.relationship('Goal', backref='user', cascade="all, delete-orphan", lazy=True)
+    transactions          = db.relationship('Transaction', backref='user', cascade=CASCADE_ALL_DELETE_ORPHAN, lazy=True)
+    budgets               = db.relationship('BudgetCategory', backref='user', cascade=CASCADE_ALL_DELETE_ORPHAN, lazy=True)
+    accounts              = db.relationship('Account', backref='user', cascade=CASCADE_ALL_DELETE_ORPHAN, lazy=True)
+    investments           = db.relationship('Investment', backref='user', cascade=CASCADE_ALL_DELETE_ORPHAN, lazy=True)
+    portfolio_history     = db.relationship('PortfolioHistory', backref='user', cascade=CASCADE_ALL_DELETE_ORPHAN, lazy=True)
+    goals                 = db.relationship('Goal', backref='user', cascade=CASCADE_ALL_DELETE_ORPHAN, lazy=True)
 
     @property
     def role_title(self):
@@ -81,7 +84,7 @@ class Account(BaseModel):
     __tablename__ = 'accounts'
 
     id           = db.Column(db.Integer, primary_key=True)
-    user_id      = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id      = db.Column(db.Integer, db.ForeignKey(USERS_ID_FK), nullable=False)
     name         = db.Column(db.String(100), nullable=False)
     account_type = db.Column(db.String(50), default='Bank')
     balance      = db.Column(db.Float, default=0.0)
@@ -96,7 +99,7 @@ class Transaction(BaseModel):
     __tablename__ = 'transactions'
 
     id           = db.Column(db.Integer, primary_key=True)
-    user_id      = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id      = db.Column(db.Integer, db.ForeignKey(USERS_ID_FK), nullable=False)
     account_id   = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
     title        = db.Column(db.String(150), nullable=False)
     category     = db.Column(db.String(80), nullable=False)
@@ -115,7 +118,7 @@ class BudgetCategory(BaseModel):
     __tablename__ = 'budget_categories'
 
     id              = db.Column(db.Integer, primary_key=True)
-    user_id         = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id         = db.Column(db.Integer, db.ForeignKey(USERS_ID_FK), nullable=False)
     name            = db.Column(db.String(100), nullable=False)
     allocated       = db.Column(db.Float, nullable=False)
     spent           = db.Column(db.Float, nullable=False, default=0.0)
@@ -163,7 +166,7 @@ class Investment(BaseModel):
     __tablename__ = 'investments'
 
     id             = db.Column(db.Integer, primary_key=True)
-    user_id        = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id        = db.Column(db.Integer, db.ForeignKey(USERS_ID_FK), nullable=False)
     asset_name     = db.Column(db.String(150), nullable=False)
     ticker         = db.Column(db.String(30), nullable=True)
     asset_type     = db.Column(db.String(40), nullable=False)
@@ -176,7 +179,7 @@ class Investment(BaseModel):
     created_at     = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at     = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    history        = db.relationship('PortfolioHistory', backref='investment', cascade='all, delete-orphan', lazy=True)
+    history        = db.relationship('PortfolioHistory', backref='investment', cascade=CASCADE_ALL_DELETE_ORPHAN, lazy=True)
 
     @property
     def invested_value(self):
@@ -208,7 +211,7 @@ class PortfolioHistory(BaseModel):
     __tablename__ = 'portfolio_history'
 
     id                   = db.Column(db.Integer, primary_key=True)
-    user_id              = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id              = db.Column(db.Integer, db.ForeignKey(USERS_ID_FK), nullable=False)
     investment_id        = db.Column(db.Integer, db.ForeignKey('investments.id'), nullable=True)
     date                 = db.Column(db.String(50), nullable=False)
     invested_total       = db.Column(db.Float, nullable=False)
@@ -225,7 +228,7 @@ class Goal(BaseModel):
     __tablename__ = 'goals'
 
     id                   = db.Column(db.Integer, primary_key=True)
-    user_id              = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id              = db.Column(db.Integer, db.ForeignKey(USERS_ID_FK), nullable=False)
     goal_name            = db.Column(db.String(150), nullable=False)
     goal_type            = db.Column(db.String(50), nullable=False)
     target_amount        = db.Column(db.Float, nullable=False)
@@ -236,7 +239,7 @@ class Goal(BaseModel):
     created_at           = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at           = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    contributions        = db.relationship('GoalTransaction', backref='goal', cascade='all, delete-orphan', lazy=True)
+    contributions        = db.relationship('GoalTransaction', backref='goal', cascade=CASCADE_ALL_DELETE_ORPHAN, lazy=True)
 
     @property
     def progress_pct(self):
@@ -268,8 +271,10 @@ class Goal(BaseModel):
             return 'Target Reached'
         m = self.months_remaining
         if m >= 12:
+            if m == 12:
+                return '1 yr left'
             yrs = round(m / 12, 1)
-            return f'{yrs} yrs left' if yrs != 1.0 else '1 yr left'
+            return f'{yrs} yrs left'
         return f'{m} mos left' if m != 1 else '1 mo left'
 
     @property

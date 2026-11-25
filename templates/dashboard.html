@@ -103,13 +103,13 @@
       </div>
       <div class="donut-chart-container">
         <div class="donut-canvas-wrap">
-          <canvas id="expenseDonutChart"></canvas>
+          <canvas id="expenseDonutChart" data-labels="{{ donut_labels|tojson|forceescape }}" data-values="{{ donut_data|tojson|forceescape }}" data-colors="{{ donut_colors|tojson|forceescape }}" data-currency="{{ currency_symbol }}"></canvas>
         </div>
         <div class="donut-legend-list">
           {% for item in donut_items %}
             <div class="donut-legend-row">
               <div class="legend-color-label">
-                <span class="legend-swatch" style="background-color: {{ item.color }};"></span>
+                <span class="legend-swatch" data-bg="{{ item.color }}"></span>
                 <span class="legend-name">{{ item.name }}</span>
               </div>
               <div class="legend-values">
@@ -136,7 +136,7 @@
         </div>
       </div>
       <div class="line-chart-container">
-        <canvas id="monthlyTrendChart"></canvas>
+        <canvas id="monthlyTrendChart" data-labels="{{ trend_labels|tojson|forceescape }}" data-income="{{ trend_income|tojson|forceescape }}" data-expense="{{ trend_expense|tojson|forceescape }}" data-currency="{{ currency_symbol }}"></canvas>
       </div>
     </div>
   </div>
@@ -218,9 +218,10 @@
 
     var donutCtx = document.getElementById('expenseDonutChart');
     if (donutCtx) {
-      var dLabels = {{ donut_labels|tojson }};
-      var dData = {{ donut_data|tojson }};
-      var dColors = {{ donut_colors|tojson }};
+      var dLabels = JSON.parse(donutCtx.dataset.labels || '[]');
+      var dData = JSON.parse(donutCtx.dataset.values || '[]');
+      var dColors = JSON.parse(donutCtx.dataset.colors || '[]');
+      var dCurr = donutCtx.dataset.currency || '';
 
       if (dData.length === 0) {
         dLabels = ['No Expenses'];
@@ -247,7 +248,7 @@
             tooltip: {
               callbacks: {
                 label: function(context) {
-                  return ' ' + context.label + ': ' + '{{ currency_symbol }}' + Number(context.raw).toLocaleString(undefined, {minimumFractionDigits: 2});
+                  return ' ' + context.label + ': ' + dCurr + Number(context.raw).toLocaleString(undefined, {minimumFractionDigits: 2});
                 }
               }
             }
@@ -259,9 +260,10 @@
 
     var trendCtx = document.getElementById('monthlyTrendChart');
     if (trendCtx) {
-      var tLabels = {{ trend_labels|tojson }};
-      var tIncome = {{ trend_income|tojson }};
-      var tExpense = {{ trend_expense|tojson }};
+      var tLabels = JSON.parse(trendCtx.dataset.labels || '[]');
+      var tIncome = JSON.parse(trendCtx.dataset.income || '[]');
+      var tExpense = JSON.parse(trendCtx.dataset.expense || '[]');
+      var tCurr = trendCtx.dataset.currency || '';
 
       new Chart(trendCtx, {
         type: 'line',
@@ -306,7 +308,7 @@
               ticks: {
                 color: textColor,
                 callback: function(val) {
-                  return '{{ currency_symbol }}' + Number(val).toLocaleString();
+                  return tCurr + Number(val).toLocaleString();
                 }
               }
             }
@@ -316,7 +318,7 @@
             tooltip: {
               callbacks: {
                 label: function(context) {
-                  return ' ' + context.dataset.label + ': ' + '{{ currency_symbol }}' + Number(context.raw).toLocaleString(undefined, {minimumFractionDigits: 2});
+                  return ' ' + context.dataset.label + ': ' + tCurr + Number(context.raw).toLocaleString(undefined, {minimumFractionDigits: 2});
                 }
               }
             }

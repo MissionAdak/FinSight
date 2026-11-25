@@ -55,12 +55,12 @@
         <div class="category-breakdown-row">
           <div class="cat-left-info">
             <div class="cat-header-line">
-              <span class="cat-swatch-badge" style="background-color: {{ cat.color }};"></span>
+              <span class="cat-swatch-badge" data-bg="{{ cat.color }}"></span>
               <strong class="cat-name-title">{{ cat.name }}</strong>
               <span class="cat-count-pill">{{ cat.count }} transactions</span>
             </div>
             <div class="cat-progress-track">
-              <div class="cat-progress-fill" style="width: {{ cat.pct }}%; background-color: {{ cat.color }};"></div>
+              <div class="cat-progress-fill" data-width="{{ cat.pct }}" data-bg="{{ cat.color }}"></div>
             </div>
             {% if cat.modes %}
               <div class="cat-modes-line text-xs text-muted">Modes used: {{ cat.modes }}</div>

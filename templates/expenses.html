@@ -43,11 +43,13 @@
   <div class="filter-toolbar-card">
     <form method="GET" action="{{ url_for('expenses') }}" class="filter-form">
       <div class="filter-group-input">
-        <input type="text" name="q" value="{{ search }}" placeholder="Search description, payee or notes..." class="field-input">
+        <label for="expense-search" class="sr-only">Search expenses</label>
+        <input type="text" id="expense-search" name="q" value="{{ search }}" placeholder="Search description, payee or notes..." class="field-input">
       </div>
 
       <div class="filter-group-select">
-        <select name="category" class="field-input">
+        <label for="expense-category" class="sr-only">Filter by category</label>
+        <select id="expense-category" name="category" class="field-input">
           <option value="">All Categories</option>
           {% for c in categories %}
             <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
@@ -56,7 +58,8 @@
       </div>
 
       <div class="filter-group-select">
-        <select name="mode" class="field-input">
+        <label for="expense-mode" class="sr-only">Filter by payment mode</label>
+        <select id="expense-mode" name="mode" class="field-input">
           <option value="">All Payment Modes</option>
           {% for m in payment_modes %}
             <option value="{{ m }}" {% if selected_mode == m %}selected{% endif %}>{{ m }}</option>

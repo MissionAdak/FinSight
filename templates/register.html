@@ -192,11 +192,11 @@
         </div>
 
         <div class="field-group">
-          <label class="field-label">Account Role &amp; Financial Scope</label>
+          <span class="field-label">Account Role &amp; Financial Scope</span>
           <div class="role-selector-grid">
             
-            <label class="role-card {% if role == 'user' %}active{% endif %}">
-              <input type="radio" name="role" value="user" {% if role == 'user' %}checked{% endif %} onchange="updateRoleUI(this.value)">
+            <label class="role-card {% if selected_role == 'user' %}active{% endif %}">
+              <input type="radio" name="role" value="user" {% if selected_role == 'user' %}checked{% endif %} onchange="updateRoleUI(this.value)">
               <div class="role-card-body">
                 <div class="role-header-line">
                   <span class="role-title">Standard User</span>
@@ -205,8 +205,8 @@
               </div>
             </label>
 
-            <label class="role-card {% if role == 'shop_owner' %}active{% endif %}">
-              <input type="radio" name="role" value="shop_owner" {% if role == 'shop_owner' %}checked{% endif %} onchange="updateRoleUI(this.value)">
+            <label class="role-card {% if selected_role == 'shop_owner' %}active{% endif %}">
+              <input type="radio" name="role" value="shop_owner" {% if selected_role == 'shop_owner' %}checked{% endif %} onchange="updateRoleUI(this.value)">
               <div class="role-card-body">
                 <div class="role-header-line">
                   <span class="role-title">Shop Owner</span>
@@ -215,8 +215,8 @@
               </div>
             </label>
 
-            <label class="role-card {% if role == 'admin' %}active{% endif %}">
-              <input type="radio" name="role" value="admin" {% if role == 'admin' %}checked{% endif %} onchange="updateRoleUI(this.value)">
+            <label class="role-card {% if selected_role == 'admin' %}active{% endif %}">
+              <input type="radio" name="role" value="admin" {% if selected_role == 'admin' %}checked{% endif %} onchange="updateRoleUI(this.value)">
               <div class="role-card-body">
                 <div class="role-header-line">
                   <span class="role-title">Administrator</span>
@@ -353,7 +353,6 @@
       }
     });
 
-    var bizWrap = document.getElementById('business-field-wrap');
     var bizLabel = document.getElementById('biz-label-text');
     var bizOptional = document.getElementById('biz-optional-tag');
     var bizInput = document.getElementById('business_name');

@@ -117,7 +117,7 @@
         </div>
         <div class="donut-chart-layout">
           <div class="donut-canvas-container">
-            <canvas id="assetAllocationChart"></canvas>
+            <canvas id="assetAllocationChart" data-labels="{{ allocation_breakdown|map(attribute='type')|list|tojson|forceescape }}" data-values="{{ allocation_breakdown|map(attribute='value')|list|tojson|forceescape }}" data-currency="{{ currency_symbol }}"></canvas>
             <div class="donut-center-overlay">
               <span class="donut-center-label">Portfolio</span>
               <span class="donut-center-val font-mono">{{ format_money(total_portfolio_value) }}</span>
@@ -154,7 +154,7 @@
           </div>
         </div>
         <div class="line-chart-container">
-          <canvas id="portfolioPerfChart"></canvas>
+          <canvas id="portfolioPerfChart" data-labels="{{ chart_labels|tojson|forceescape }}" data-portfolio="{{ chart_portfolio_returns|tojson|forceescape }}" data-benchmark="{{ chart_benchmark_returns|tojson|forceescape }}"></canvas>
         </div>
         <div class="perf-chart-footer">
           <div class="perf-legend-item">
@@ -241,7 +241,7 @@
               </div>
               <div class="goal-progress-wrap">
                 <div class="goal-progress-bar">
-                  <div class="goal-progress-fill {% if g.progress_pct >= 100 %}fill-blue{% elif g.computed_status == 'At Risk' %}fill-warning{% else %}fill-green{% endif %}" style="width: {{ g.progress_pct }}%"></div>
+                  <div class="goal-progress-fill {% if g.progress_pct >= 100 %}fill-blue{% elif g.computed_status == 'At Risk' %}fill-warning{% else %}fill-green{% endif %}" data-width="{{ g.progress_pct }}"></div>
                 </div>
                 <div class="goal-progress-labels">
                   <span class="font-mono">{{ format_money(g.current_amount) }} saved ({{ g.progress_pct }}%)</span>
@@ -261,7 +261,9 @@
     <div class="table-card">
       <div class="ledger-filter-bar">
         <div class="filter-group">
+          <label for="holdingsSearch" class="sr-only">Search instruments or tickers</label>
           <input type="text" id="holdingsSearch" class="form-control filter-input" placeholder="Search instruments or tickers..." onkeyup="filterHoldingsTable()">
+          <label for="holdingsTypeFilter" class="sr-only">Filter by asset class</label>
           <select id="holdingsTypeFilter" class="form-control filter-select" onchange="filterHoldingsTable()">
             <option value="">All Asset Classes</option>
             <option value="Equity">Equity</option>
@@ -509,7 +511,7 @@
         </div>
       </div>
       <div class="line-chart-container" style="height: 320px;">
-        <canvas id="holdingsBarChart"></canvas>
+        <canvas id="holdingsBarChart" data-labels="{{ investments|map(attribute='asset_name')|list|tojson|forceescape }}" data-returns="{{ investments|map(attribute='return_pct')|list|tojson|forceescape }}"></canvas>
       </div>
     </div>
   </div>
@@ -526,19 +528,19 @@
       <div class="modal-body">
         <div class="form-row">
           <div class="form-group flex-2">
-            <label class="form-label">Instrument Name *</label>
-            <input type="text" name="asset_name" class="form-control" placeholder="e.g. HDFC Bank, Vanguard S&P 500" required>
+            <label for="add-inv-name" class="form-label">Instrument Name *</label>
+            <input type="text" id="add-inv-name" name="asset_name" class="form-control" placeholder="e.g. HDFC Bank, Vanguard S&P 500" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Ticker Symbol</label>
-            <input type="text" name="ticker" class="form-control" placeholder="e.g. HDFCBANK, VOO">
+            <label for="add-inv-ticker" class="form-label">Ticker Symbol</label>
+            <input type="text" id="add-inv-ticker" name="ticker" class="form-control" placeholder="e.g. HDFCBANK, VOO">
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Asset Class *</label>
-            <select name="asset_type" class="form-control" required>
+            <label for="add-inv-type" class="form-label">Asset Class *</label>
+            <select id="add-inv-type" name="asset_type" class="form-control" required>
               <option value="Equity">Equity</option>
               <option value="Mutual Fund">Mutual Fund</option>
               <option value="ETF">ETF</option>
@@ -550,36 +552,36 @@
             </select>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Quantity / Units *</label>
-            <input type="number" step="any" min="0.0001" name="quantity" class="form-control" placeholder="1.0" required>
+            <label for="add-inv-qty" class="form-label">Quantity / Units *</label>
+            <input type="number" id="add-inv-qty" step="any" min="0.0001" name="quantity" class="form-control" placeholder="1.0" required>
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Avg Purchase Price ({{ currency_symbol }}) *</label>
-            <input type="number" step="any" min="0.01" name="purchase_price" class="form-control" placeholder="0.00" required>
+            <label for="add-inv-buy" class="form-label">Avg Purchase Price ({{ currency_symbol }}) *</label>
+            <input type="number" id="add-inv-buy" step="any" min="0.01" name="purchase_price" class="form-control" placeholder="0.00" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Current Market Price ({{ currency_symbol }})</label>
-            <input type="number" step="any" min="0.01" name="current_price" class="form-control" placeholder="0.00">
+            <label for="add-inv-curr" class="form-label">Current Market Price ({{ currency_symbol }})</label>
+            <input type="number" id="add-inv-curr" step="any" min="0.01" name="current_price" class="form-control" placeholder="0.00">
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Purchase Date *</label>
-            <input type="date" name="purchase_date" class="form-control" value="{{ today_date }}" required>
+            <label for="add-inv-date" class="form-label">Purchase Date *</label>
+            <input type="date" id="add-inv-date" name="purchase_date" class="form-control" value="{{ today_date }}" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Today's Day Change (%)</label>
-            <input type="number" step="any" name="day_change_pct" class="form-control" placeholder="0.0">
+            <label for="add-inv-day" class="form-label">Today's Day Change (%)</label>
+            <input type="number" id="add-inv-day" step="any" name="day_change_pct" class="form-control" placeholder="0.0">
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Notes &amp; Strategy Description</label>
-          <input type="text" name="notes" class="form-control" placeholder="Optional notes, sector or broker reference">
+          <label for="add-inv-notes" class="form-label">Notes &amp; Strategy Description</label>
+          <input type="text" id="add-inv-notes" name="notes" class="form-control" placeholder="Optional notes, sector or broker reference">
         </div>
       </div>
       <div class="modal-footer">
@@ -601,28 +603,28 @@
       <div class="modal-body">
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Quantity / Units *</label>
+            <label for="editInvQty" class="form-label">Quantity / Units *</label>
             <input type="number" step="any" min="0.0001" name="quantity" id="editInvQty" class="form-control" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Avg Purchase Price ({{ currency_symbol }}) *</label>
+            <label for="editInvBuy" class="form-label">Avg Purchase Price ({{ currency_symbol }}) *</label>
             <input type="number" step="any" min="0.01" name="purchase_price" id="editInvBuy" class="form-control" required>
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Current Market Price ({{ currency_symbol }}) *</label>
+            <label for="editInvCurr" class="form-label">Current Market Price ({{ currency_symbol }}) *</label>
             <input type="number" step="any" min="0.01" name="current_price" id="editInvCurr" class="form-control" required>
           </div>
           <div class="form-group flex-1">
-            <label class="form-label">Today's Day Change (%)</label>
+            <label for="editInvDay" class="form-label">Today's Day Change (%)</label>
             <input type="number" step="any" name="day_change_pct" id="editInvDay" class="form-control">
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Notes</label>
+          <label for="editInvNotes" class="form-label">Notes</label>
           <input type="text" name="notes" id="editInvNotes" class="form-control">
         </div>
       </div>
@@ -678,9 +680,9 @@
     openModal('modal-edit-investment');
   }
 
-  var perfLabels = {{ chart_labels|tojson }};
-  var perfPortfolio = {{ chart_portfolio_returns|tojson }};
-  var perfBenchmark = {{ chart_benchmark_returns|tojson }};
+  var perfLabels = [];
+  var perfPortfolio = [];
+  var perfBenchmark = [];
   var perfChartInstance = null;
 
   function filterPerfChart(range, btn) {
@@ -711,8 +713,9 @@
 
     var allocCtx = document.getElementById('assetAllocationChart');
     if (allocCtx) {
-      var allocLabels = [{% for item in allocation_breakdown %}'{{ item.type }}',{% endfor %}];
-      var allocData = [{% for item in allocation_breakdown %}{{ item.value }},{% endfor %}];
+      var allocLabels = JSON.parse(allocCtx.dataset.labels || '[]');
+      var allocData = JSON.parse(allocCtx.dataset.values || '[]');
+      var allocCurr = allocCtx.dataset.currency || '';
       var allocColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b'];
 
       new Chart(allocCtx, {
@@ -735,7 +738,7 @@
             tooltip: {
               callbacks: {
                 label: function(ctx) {
-                  return ' ' + ctx.label + ': {{ currency_symbol }}' + ctx.parsed.toLocaleString();
+                  return ' ' + ctx.label + ': ' + allocCurr + ctx.parsed.toLocaleString();
                 }
               }
             }
@@ -746,6 +749,9 @@
 
     var perfCtx = document.getElementById('portfolioPerfChart');
     if (perfCtx) {
+      perfLabels = JSON.parse(perfCtx.dataset.labels || '[]');
+      perfPortfolio = JSON.parse(perfCtx.dataset.portfolio || '[]');
+      perfBenchmark = JSON.parse(perfCtx.dataset.benchmark || '[]');
       perfChartInstance = new Chart(perfCtx, {
         type: 'line',
         data: {
@@ -808,8 +814,8 @@
 
     var barCtx = document.getElementById('holdingsBarChart');
     if (barCtx) {
-      var barLabels = [{% for inv in investments %}'{{ inv.asset_name }}',{% endfor %}];
-      var barReturns = [{% for inv in investments %}{{ inv.return_pct }},{% endfor %}];
+      var barLabels = JSON.parse(barCtx.dataset.labels || '[]');
+      var barReturns = JSON.parse(barCtx.dataset.returns || '[]');
       var barColors = barReturns.map(function(r) { return r >= 0 ? '#10b981' : '#ef4444'; });
 
       new Chart(barCtx, {

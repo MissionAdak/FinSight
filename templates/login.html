@@ -71,18 +71,18 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
 
         <div class="field-group">
-          <label class="field-label">Select Type of Login</label>
+          <span class="field-label">Select Type of Login</span>
           <div class="login-type-selector">
             <label class="login-type-opt">
-              <input type="radio" name="role" value="user" {% if role == 'user' or not role %}checked{% endif %}>
+              <input type="radio" name="role" value="user" {% if selected_role == 'user' or not selected_role %}checked{% endif %}>
               <span class="login-type-btn">Standard User</span>
             </label>
             <label class="login-type-opt">
-              <input type="radio" name="role" value="shop_owner" {% if role == 'shop_owner' %}checked{% endif %}>
+              <input type="radio" name="role" value="shop_owner" {% if selected_role == 'shop_owner' %}checked{% endif %}>
               <span class="login-type-btn">Shop Owner</span>
             </label>
             <label class="login-type-opt">
-              <input type="radio" name="role" value="admin" {% if role == 'admin' %}checked{% endif %}>
+              <input type="radio" name="role" value="admin" {% if selected_role == 'admin' %}checked{% endif %}>
               <span class="login-type-btn">Administrator</span>
             </label>
           </div>
