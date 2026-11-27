@@ -2,56 +2,64 @@
 
 {% block body %}
 <div class="app-shell">
-  <aside class="app-sidebar">
+  <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+  <aside id="app-sidebar" class="app-sidebar">
     <div class="sidebar-brand">
       <div class="brand-logo-wrap">
         <span class="logo-symbol">&#9670;</span>
         <div class="brand-info">
           <span class="brand-name">FinSight</span>
-          <span class="brand-tagline">Finance Management</span>
+          <span class="brand-tagline">Simple Money Tracker</span>
         </div>
       </div>
+      <button type="button" class="sidebar-mobile-close" onclick="closeMobileSidebar()" aria-label="Close navigation">&times;</button>
     </div>
 
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav" aria-label="Main navigation">
+      <div class="sidebar-section-label">DAILY MONEY</div>
       <a href="{{ url_for('dashboard') }}" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         <span>Dashboard</span>
       </a>
       <a href="{{ url_for('expenses') }}" class="nav-item {% if active_page == 'expenses' %}active{% endif %}">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
         <span>Expenses</span>
       </a>
+      <a href="{{ url_for('income') }}" class="nav-item {% if active_page == 'income' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>Income</span>
+      </a>
       <a href="{{ url_for('budgets') }}" class="nav-item {% if active_page == 'budgets' %}active{% endif %}">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         <span>Budgets</span>
       </a>
+
+      <div class="sidebar-section-label">GROW WEALTH</div>
       <a href="{{ url_for('investments') }}" class="nav-item {% if active_page == 'investments' %}active{% endif %}">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         <span>Investments</span>
       </a>
       <a href="{{ url_for('goals') }}" class="nav-item {% if active_page == 'goals' %}active{% endif %}">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
         <span>Goals</span>
       </a>
-      <a href="{{ url_for('income') }}" class="nav-item {% if active_page == 'income' %}active{% endif %}">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-        <span>Income</span>
-      </a>
+
+      <div class="sidebar-section-label">ACCOUNT &amp; TOOLS</div>
       <a href="{{ url_for('accounts') }}" class="nav-item {% if active_page == 'accounts' %}active{% endif %}">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
         <span>Accounts</span>
       </a>
       <a href="{{ url_for('categories') }}" class="nav-item {% if active_page == 'categories' %}active{% endif %}">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
         <span>Categories</span>
       </a>
       <a href="{{ url_for('reports') }}" class="nav-item {% if active_page == 'reports' %}active{% endif %}">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         <span>Reports</span>
       </a>
       <a href="{{ url_for('settings') }}" class="nav-item {% if active_page == 'settings' %}active{% endif %}">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span>Settings</span>
       </a>
     </nav>
@@ -61,7 +69,7 @@
         <div class="market-overview-card">
           <div class="mkt-header">
             <span class="mkt-title">Market Pulse</span>
-            <span class="mkt-live-pill">LIVE</span>
+            <span class="mkt-live-pill"><span class="status-indicator-dot"></span> LIVE</span>
           </div>
           <div class="mkt-index-item">
             <div class="mkt-idx-left">
@@ -70,7 +78,7 @@
             </div>
             <div class="mkt-idx-right">
               <span class="mkt-idx-chg font-mono text-green">+0.65%</span>
-              <svg width="40" height="16" viewBox="0 0 40 16" fill="none" stroke="#10b981" stroke-width="2"><polyline points="2,13 10,11 18,14 28,6 38,3"/></svg>
+              <svg width="40" height="16" viewBox="0 0 40 16" fill="none" stroke="#10b981" stroke-width="2" aria-hidden="true"><polyline points="2,13 10,11 18,14 28,6 38,3"/></svg>
             </div>
           </div>
           <div class="mkt-index-item">
@@ -80,7 +88,7 @@
             </div>
             <div class="mkt-idx-right">
               <span class="mkt-idx-chg font-mono text-green">+0.58%</span>
-              <svg width="40" height="16" viewBox="0 0 40 16" fill="none" stroke="#10b981" stroke-width="2"><polyline points="2,14 12,12 20,13 30,5 38,3"/></svg>
+              <svg width="40" height="16" viewBox="0 0 40 16" fill="none" stroke="#10b981" stroke-width="2" aria-hidden="true"><polyline points="2,14 12,12 20,13 30,5 38,3"/></svg>
             </div>
           </div>
         </div>
@@ -88,24 +96,24 @@
 
       <div class="monthly-overview-card">
         <div class="mo-header">
-          <span class="mo-title">Monthly Overview</span>
+          <span class="mo-title">This Month</span>
           <span class="mo-badge">{{ currency_code }}</span>
         </div>
         <div class="mo-row">
-          <span class="mo-label">Inflow:</span>
-          <span class="mo-val text-blue font-mono">{{ format_money(sidebar_summary.income) }}</span>
+          <span class="mo-label">Money In:</span>
+          <span class="mo-val mo-val-in font-mono">{{ format_money(sidebar_summary.income) }}</span>
         </div>
         <div class="mo-row">
-          <span class="mo-label">Outflow:</span>
-          <span class="mo-val text-dark font-mono">{{ format_money(sidebar_summary.expense) }}</span>
+          <span class="mo-label">Money Spent:</span>
+          <span class="mo-val mo-val-out font-mono">{{ format_money(sidebar_summary.expense) }}</span>
         </div>
         <div class="mo-row">
-          <span class="mo-label">Net Savings:</span>
-          <span class="mo-val text-green font-mono">{{ format_money(sidebar_summary.savings) }}</span>
+          <span class="mo-label">Money Saved:</span>
+          <span class="mo-val mo-val-save font-mono">{{ format_money(sidebar_summary.savings) }}</span>
         </div>
         <div class="mo-budget-meter">
           <div class="mo-meter-label">
-            <span>Budget Cap</span>
+            <span>Monthly Budget Used</span>
             <span>{{ sidebar_summary.budget_pct }}%</span>
           </div>
           <div class="mo-meter-track">
@@ -114,7 +122,7 @@
         </div>
       </div>
 
-      <button type="button" class="btn-sidebar-add" onclick="openModal('modal-transaction')">
+      <button type="button" class="btn-sidebar-add" data-default-type="{% if active_page == 'income' %}income{% else %}expense{% endif %}" onclick="openTransactionModal(this.dataset.defaultType)">
         <span class="btn-plus-icon">+</span> Add Transaction
       </button>
     </div>
@@ -123,33 +131,39 @@
   <div class="app-content-wrapper">
     <header class="app-header">
       <div class="header-left">
+        <button type="button" class="mobile-menu-btn" onclick="openMobileSidebar()" aria-label="Open menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
         <h1 class="header-page-title">{{ page_title }}</h1>
       </div>
 
       <div class="header-right">
-        <a href="{{ url_for('toggle_theme') }}" class="header-icon-btn" title="Toggle theme">
-          <span class="sr-only">Toggle theme</span>
-          {% if user_theme == 'dark' %}
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-          {% else %}
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          {% endif %}
-        </a>
-
-        <div class="notification-wrap">
-          <button type="button" class="header-icon-btn notification-btn" onclick="toggleNotificationDropdown()" title="Notifications">
-            <span class="sr-only">Notifications</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            {% if total_notif_count and total_notif_count > 0 %}
-              <span class="notification-badge">{{ total_notif_count }}</span>
-            {% elif budget_alerts|length > 0 %}
-              <span class="notification-badge">{{ budget_alerts|length }}</span>
+        <form method="POST" action="{{ url_for('toggle_theme') }}" class="inline-icon-form" data-no-disable="1">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <button type="submit" class="header-icon-btn" title="Switch Light or Dark Mode">
+            <span class="sr-only">Switch Light or Dark Mode</span>
+            {% if user_theme == 'dark' %}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            {% else %}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
             {% endif %}
           </button>
-          
+        </form>
+
+        <div class="notification-wrap">
+          <button type="button" class="header-icon-btn notification-btn" onclick="toggleNotificationDropdown()" title="Alerts and Updates">
+            <span class="sr-only">Alerts and Updates</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            {% if total_notif_count and total_notif_count > 0 %}
+              <span class="notification-badge notification-badge-pulse">{{ total_notif_count }}</span>
+            {% elif budget_alerts|length > 0 %}
+              <span class="notification-badge notification-badge-pulse">{{ budget_alerts|length }}</span>
+            {% endif %}
+          </button>
+
           <div id="notification-dropdown" class="notification-dropdown">
             <div class="notif-dropdown-header">
-              <span>Financial Alerts &amp; Telemetry</span>
+              <span>Alerts &amp; Updates</span>
               <span class="notif-count-tag">{{ total_notif_count or budget_alerts|length }} Active</span>
             </div>
             <div class="notif-list">
@@ -161,9 +175,9 @@
                   </div>
                   <div class="notif-desc">
                     {% if alert.is_over %}
-                      Exceeded allocated budget cap ({{ format_money(alert.spent) }} / {{ format_money(alert.allocated) }}).
+                      You went over your budget ({{ format_money(alert.spent) }} spent of {{ format_money(alert.allocated) }}).
                     {% else %}
-                      Reached {{ alert.pct }}% threshold (alert cap: {{ alert.thresh }}%).
+                      You used {{ alert.pct }}% of your budget (alert set at {{ alert.thresh }}%).
                     {% endif %}
                   </div>
                 </div>
@@ -173,11 +187,9 @@
                 <div class="notif-item {% if alert.is_gain %}notif-item-success{% else %}notif-item-danger{% endif %}">
                   <div class="notif-title-row">
                     <strong>{{ alert.title }}</strong>
-                    <span class="notif-pill {% if alert.is_gain %}pill-completed{% else %}pill-danger{% endif %}">Market</span>
+                    <span class="notif-pill {% if alert.is_gain %}pill-completed{% else %}pill-danger{% endif %}">Investment</span>
                   </div>
-                  <div class="notif-desc">
-                    {{ alert.desc }}
-                  </div>
+                  <div class="notif-desc">{{ alert.desc }}</div>
                 </div>
               {% endfor %}
 
@@ -187,15 +199,13 @@
                     <strong>{{ alert.title }}</strong>
                     <span class="notif-pill {% if alert.is_risk %}pill-warning{% else %}pill-completed{% endif %}">Goal</span>
                   </div>
-                  <div class="notif-desc">
-                    {{ alert.desc }}
-                  </div>
+                  <div class="notif-desc">{{ alert.desc }}</div>
                 </div>
               {% endfor %}
 
               {% if (not budget_alerts) and (not investment_alerts) and (not goal_alerts) %}
                 <div class="notif-empty">
-                  No active warnings or alerts. All financial modules within healthy parameters.
+                  All clear! Your budgets, goals, and investments look good.
                 </div>
               {% endif %}
             </div>
@@ -209,7 +219,7 @@
             <span class="user-role-tag {{ current_user.role_badge_class }}">
               {% if current_user.role == 'admin' %}Administrator
               {% elif current_user.role == 'shop_owner' %}Shop Owner
-              {% else %}Standard User{% endif %}
+              {% else %}Personal Account{% endif %}
             </span>
           </div>
         </div>
@@ -220,18 +230,20 @@
       </div>
     </header>
 
-    <div class="app-alerts-container">
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="toast-stack" role="status" aria-live="polite">
           {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">
-              <span class="alert-icon">{% if category == 'danger' %}&#33;{% else %}&#10003;{% endif %}</span>
-              <span>{{ message }}</span>
+            <div class="toast-alert toast-{{ category }}">
+              <span class="toast-icon">{% if category == 'danger' %}&#33;{% else %}&#10003;{% endif %}</span>
+              <span class="toast-text">{{ message }}</span>
+              <button type="button" class="toast-close-btn" onclick="dismissToast(this.parentElement)" aria-label="Dismiss notification">&times;</button>
+              <span class="toast-progress-bar"></span>
             </div>
           {% endfor %}
-        {% endif %}
-      {% endwith %}
-    </div>
+        </div>
+      {% endif %}
+    {% endwith %}
 
     <main class="app-main-body">
       {% block content %}{% endblock %}
@@ -243,93 +255,401 @@
   <div class="modal-dialog">
     <div class="modal-header">
       <div>
-        <h3 class="modal-title">Record Financial Transaction</h3>
-        <p class="modal-subtitle">Log an inflow or expenditure entry in {{ currency_code }} ({{ currency_symbol }}).</p>
+        <h3 class="modal-title" id="txn-modal-title">Add Expense</h3>
+        <p class="modal-subtitle" id="txn-modal-subtitle">Record money you spent in {{ currency_code }} ({{ currency_symbol }}).</p>
       </div>
-      <button type="button" class="modal-close" onclick="closeModal('modal-transaction')">&times;</button>
+      <button type="button" class="modal-close" onclick="closeModal('modal-transaction')" aria-label="Close modal">&times;</button>
     </div>
 
-    <form method="POST" action="{{ url_for('add_transaction') }}">
+    <form id="addTransactionForm" method="POST" action="{{ url_for('add_transaction') }}" data-expense-categories="{{ expense_category_options|tojson|forceescape }}" data-income-categories="{{ income_category_options|tojson|forceescape }}" data-today="{{ today_iso }}" data-currency="{{ currency_symbol }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
       <div class="modal-body">
-        
+
         <div class="field-group">
-          <span class="field-label">Transaction Type</span>
+          <span class="field-label">What kind of transaction is this?</span>
           <div class="segmented-control">
-            <label class="segment-opt">
-              <input type="radio" name="txn_type" value="expense" checked>
-              <span class="segment-btn">Outflow (Expense)</span>
+            <label class="segment-opt segment-opt-expense">
+              <input type="radio" id="txn-type-expense" name="txn_type" value="expense" checked onchange="syncTransactionModalType('add', 'expense')">
+              <span class="segment-btn">Expense (Money Spent)</span>
             </label>
-            <label class="segment-opt">
-              <input type="radio" name="txn_type" value="income">
-              <span class="segment-btn">Inflow (Revenue)</span>
+            <label class="segment-opt segment-opt-income">
+              <input type="radio" id="txn-type-income" name="txn_type" value="income" onchange="syncTransactionModalType('add', 'income')">
+              <span class="segment-btn">Income (Money Received)</span>
             </label>
           </div>
         </div>
 
         <div class="field-group">
-          <label for="txn-title" class="field-label">Transaction Title / Description</label>
-          <input type="text" id="txn-title" name="title" class="field-input" placeholder="e.g. Cloud Infrastructure or Client Invoicing" required>
+          <label for="txn-title" class="field-label">Description *</label>
+          <input type="text" id="txn-title" name="title" class="field-input" placeholder="e.g. Grocery shopping, Electricity bill" required>
         </div>
 
         <div class="field-row-grid">
           <div class="field-group">
-            <label for="txn-amount" class="field-label">Amount (<span class="currency-tag">{{ currency_code }} {{ currency_symbol }}</span>)</label>
+            <label for="txn-amount" class="field-label">Amount ({{ currency_code }} {{ currency_symbol }}) *</label>
             <div class="input-with-prefix">
               <span class="input-prefix font-bold">{{ currency_symbol }}</span>
-              <input type="number" step="0.01" min="0.01" id="txn-amount" name="amount" class="field-input prefix-padded font-mono" placeholder="0.00" required>
+              <input type="number" step="0.01" min="0.01" id="txn-amount" name="amount" class="field-input prefix-padded font-mono" placeholder="0.00" oninput="checkAddTransactionBalance()" required>
             </div>
           </div>
           <div class="field-group">
-            <label for="txn-date" class="field-label">Transaction Date</label>
-            <input type="date" id="txn-date" name="date" class="field-input" required>
+            <label for="txn-date" class="field-label">Date *</label>
+            <input type="date" id="txn-date" name="date" class="field-input" value="{{ today_iso }}" required>
           </div>
         </div>
 
         <div class="field-row-grid">
           <div class="field-group">
-            <label for="txn-category" class="field-label">Category</label>
-            <input type="text" id="txn-category" name="category" class="field-input" placeholder="e.g. Housing, Retail Sales, Groceries" required>
+            <label for="txn-category" class="field-label">Category *</label>
+            <select id="txn-category" name="category" class="field-input" required>
+              {% for cat in expense_category_options %}
+                <option value="{{ cat }}">{{ cat }}</option>
+              {% endfor %}
+            </select>
           </div>
           <div class="field-group">
-            <label for="txn-payment-mode" class="field-label">Payment Mode</label>
+            <label for="txn-payment-mode" class="field-label">Payment Method</label>
             <select id="txn-payment-mode" name="payment_mode" class="field-input">
               <option value="UPI">UPI</option>
-              <option value="Credit Card">Credit Card</option>
-              <option value="Debit Card">Debit Card</option>
               <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Debit Card">Debit Card</option>
+              <option value="Credit Card">Credit Card</option>
               <option value="Cash">Cash</option>
             </select>
           </div>
         </div>
 
         <div class="field-group">
-          <label for="txn-account" class="field-label">Associated Account / Wallet <span class="field-optional">(Optional)</span></label>
-          <select id="txn-account" name="account_id" class="field-input">
-            <option value="">-- No Account Selected --</option>
+          <label for="txn-account" class="field-label">Account / Wallet <span class="field-optional">(Optional — updates balance automatically)</span></label>
+          <select id="txn-account" name="account_id" class="field-input" onchange="checkAddTransactionBalance()">
+            <option value="">Do not link to an account</option>
             {% for a in current_user.accounts %}
-              <option value="{{ a.id }}">{{ a.name }} ({{ a.account_type }}) — Balance: {{ format_money(a.balance) }}</option>
+              <option value="{{ a.id }}" data-balance="{{ a.balance }}" data-type="{{ a.account_type }}" data-name="{{ a.name }}">{{ a.name }} ({{ a.account_type }}) — Available: {{ format_money(a.balance) }}</option>
             {% endfor %}
           </select>
+          <div id="txn-balance-warning" class="balance-warning-box" role="alert"></div>
         </div>
 
         <div class="field-group">
-          <label for="txn-notes" class="field-label">Notes / Reference <span class="field-optional">(Optional)</span></label>
-          <input type="text" id="txn-notes" name="notes" class="field-input" placeholder="e.g. Invoice #9921 or confirmation code">
+          <label for="txn-notes" class="field-label">Note <span class="field-optional">(Optional)</span></label>
+          <input type="text" id="txn-notes" name="notes" class="field-input" placeholder="Add any helpful details or receipt number">
         </div>
 
       </div>
 
       <div class="modal-footer">
         <button type="button" class="btn-secondary" onclick="closeModal('modal-transaction')">Cancel</button>
-        <button type="submit" class="btn-primary" style="width:auto; padding:0 24px;">Post Transaction</button>
+        <button type="submit" id="txn-modal-submit" class="btn-primary btn-auto-width">Save Expense</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="modal-edit-transaction" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div>
+        <h3 class="modal-title" id="edit-txn-modal-title">Edit Transaction</h3>
+        <p class="modal-subtitle">Update details below. Your account balance and budgets adjust automatically.</p>
+      </div>
+      <button type="button" class="modal-close" onclick="closeModal('modal-edit-transaction')" aria-label="Close modal">&times;</button>
+    </div>
+
+    <form id="editTransactionForm" method="POST" action="">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <div class="modal-body">
+
+        <div class="field-group">
+          <span class="field-label">Transaction Type</span>
+          <div class="segmented-control">
+            <label class="segment-opt segment-opt-expense">
+              <input type="radio" id="edit-txn-type-expense" name="txn_type" value="expense" onchange="syncTransactionModalType('edit', 'expense')">
+              <span class="segment-btn">Expense (Money Spent)</span>
+            </label>
+            <label class="segment-opt segment-opt-income">
+              <input type="radio" id="edit-txn-type-income" name="txn_type" value="income" onchange="syncTransactionModalType('edit', 'income')">
+              <span class="segment-btn">Income (Money Received)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="edit-txn-title" class="field-label">Description *</label>
+          <input type="text" id="edit-txn-title" name="title" class="field-input" required>
+        </div>
+
+        <div class="field-row-grid">
+          <div class="field-group">
+            <label for="edit-txn-amount" class="field-label">Amount ({{ currency_code }} {{ currency_symbol }}) *</label>
+            <div class="input-with-prefix">
+              <span class="input-prefix font-bold">{{ currency_symbol }}</span>
+              <input type="number" step="0.01" min="0.01" id="edit-txn-amount" name="amount" class="field-input prefix-padded font-mono" oninput="checkEditTransactionBalance()" required>
+            </div>
+          </div>
+          <div class="field-group">
+            <label for="edit-txn-date" class="field-label">Date *</label>
+            <input type="date" id="edit-txn-date" name="date" class="field-input" required>
+          </div>
+        </div>
+
+        <div class="field-row-grid">
+          <div class="field-group">
+            <label for="edit-txn-category" class="field-label">Category *</label>
+            <select id="edit-txn-category" name="category" class="field-input" required></select>
+          </div>
+          <div class="field-group">
+            <label for="edit-txn-payment-mode" class="field-label">Payment Method</label>
+            <select id="edit-txn-payment-mode" name="payment_mode" class="field-input">
+              <option value="UPI">UPI</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Debit Card">Debit Card</option>
+              <option value="Credit Card">Credit Card</option>
+              <option value="Cash">Cash</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="edit-txn-account" class="field-label">Account / Wallet <span class="field-optional">(Optional)</span></label>
+          <select id="edit-txn-account" name="account_id" class="field-input" onchange="checkEditTransactionBalance()">
+            <option value="">Do not link to an account</option>
+            {% for a in current_user.accounts %}
+              <option value="{{ a.id }}" data-balance="{{ a.balance }}" data-type="{{ a.account_type }}" data-name="{{ a.name }}">{{ a.name }} ({{ a.account_type }}) — Available: {{ format_money(a.balance) }}</option>
+            {% endfor %}
+          </select>
+          <div id="edit-txn-balance-warning" class="balance-warning-box" role="alert"></div>
+        </div>
+
+        <div class="field-group">
+          <label for="edit-txn-notes" class="field-label">Note <span class="field-optional">(Optional)</span></label>
+          <input type="text" id="edit-txn-notes" name="notes" class="field-input">
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeModal('modal-edit-transaction')">Cancel</button>
+        <button type="submit" id="edit-txn-submit" class="btn-primary btn-auto-width">Save Changes</button>
       </div>
     </form>
   </div>
 </div>
 
 <script>
+  function getAppCurrencySymbol() {
+    var form = document.getElementById('addTransactionForm');
+    return (form && form.dataset.currency) ? form.dataset.currency : '';
+  }
+
+  function formatClientMoney(val) {
+    var sym = getAppCurrencySymbol();
+    var num = Number(val) || 0;
+    var sign = num < 0 ? '-' : '';
+    return sign + sym + Math.abs(num).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+
+  function validateAccountBalance(cfg) {
+    var selectEl = document.getElementById(cfg.selectId);
+    var amountEl = document.getElementById(cfg.amountId);
+    var warnEl = document.getElementById(cfg.warningId);
+    var submitEl = document.getElementById(cfg.submitId);
+    if (!selectEl || !amountEl || !warnEl || !submitEl) return true;
+
+    var amount = parseFloat(amountEl.value);
+    var opt = selectEl.options[selectEl.selectedIndex];
+    var selectedId = selectEl.value;
+    var isOutflow = cfg.isExpense !== false;
+
+    warnEl.textContent = '';
+    warnEl.classList.remove('visible');
+    submitEl.disabled = false;
+
+    if (!selectedId || !opt || !isOutflow || !Number.isFinite(amount) || amount <= 0) {
+      return true;
+    }
+
+    var accType = opt.dataset.type || 'Bank';
+    if (accType === 'Credit Card') {
+      return true;
+    }
+
+    var available = parseFloat(opt.dataset.balance || '0');
+    if (cfg.origAccountId && cfg.origAccountId === selectedId && Number.isFinite(cfg.origDelta)) {
+      available = available - cfg.origDelta;
+    }
+
+    if (Math.round((available - amount) * 100) < 0) {
+      var accName = opt.dataset.name || 'this account';
+      warnEl.textContent = 'Insufficient balance in ' + accName + ' (Available: ' + formatClientMoney(available) + ', Needed: ' + formatClientMoney(amount) + '). Choose another account or a Credit Card.';
+      warnEl.classList.add('visible');
+      submitEl.disabled = true;
+      return false;
+    }
+    return true;
+  }
+
+  function checkAddTransactionBalance() {
+    var isExp = document.getElementById('txn-type-expense');
+    validateAccountBalance({
+      selectId: 'txn-account',
+      amountId: 'txn-amount',
+      warningId: 'txn-balance-warning',
+      submitId: 'txn-modal-submit',
+      isExpense: !isExp || isExp.checked
+    });
+  }
+
+  function checkEditTransactionBalance() {
+    var form = document.getElementById('editTransactionForm');
+    var isExp = document.getElementById('edit-txn-type-expense');
+    var origAccId = form ? (form.dataset.origAccountId || '') : '';
+    var origDelta = form ? parseFloat(form.dataset.origDelta || '0') : 0;
+    validateAccountBalance({
+      selectId: 'edit-txn-account',
+      amountId: 'edit-txn-amount',
+      warningId: 'edit-txn-balance-warning',
+      submitId: 'edit-txn-submit',
+      isExpense: !isExp || isExp.checked,
+      origAccountId: origAccId,
+      origDelta: origDelta
+    });
+  }
+
+  function getTodayIso() {
+    var form = document.getElementById('addTransactionForm');
+    if (form && form.dataset.today) {
+      return form.dataset.today;
+    }
+    var now = new Date();
+    var yyyy = now.getFullYear();
+    var mm = String(now.getMonth() + 1).padStart(2, '0');
+    var dd = String(now.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  function getCategoryList(txnType) {
+    var form = document.getElementById('addTransactionForm');
+    if (!form) return [];
+    var raw = txnType === 'income' ? form.dataset.incomeCategories : form.dataset.expenseCategories;
+    try {
+      return JSON.parse(raw || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function populateCategorySelect(selectEl, txnType, selectedValue) {
+    if (!selectEl) return;
+    var items = getCategoryList(txnType);
+    selectEl.innerHTML = '';
+    var hasSelected = false;
+    items.forEach(function(cat) {
+      var opt = document.createElement('option');
+      opt.value = cat;
+      opt.textContent = cat;
+      if (selectedValue && cat.toLowerCase() === selectedValue.toLowerCase()) {
+        opt.selected = true;
+        hasSelected = true;
+      }
+      selectEl.appendChild(opt);
+    });
+    if (selectedValue && !hasSelected) {
+      var customOpt = document.createElement('option');
+      customOpt.value = selectedValue;
+      customOpt.textContent = selectedValue;
+      customOpt.selected = true;
+      selectEl.insertBefore(customOpt, selectEl.firstChild);
+    }
+  }
+
+  function syncTransactionModalType(mode, txnType, currentCategory) {
+    var isIncome = txnType === 'income';
+    if (mode === 'add') {
+      var titleEl = document.getElementById('txn-modal-title');
+      var subEl = document.getElementById('txn-modal-subtitle');
+      var submitEl = document.getElementById('txn-modal-submit');
+      var descEl = document.getElementById('txn-title');
+      if (titleEl) titleEl.textContent = isIncome ? 'Add Income' : 'Add Expense';
+      if (subEl) subEl.textContent = isIncome ? 'Record money you received.' : 'Record money you spent.';
+      if (submitEl) submitEl.textContent = isIncome ? 'Save Income' : 'Save Expense';
+      if (descEl) descEl.placeholder = isIncome ? 'e.g. Monthly salary, Client payment' : 'e.g. Grocery shopping, Electricity bill';
+      populateCategorySelect(document.getElementById('txn-category'), txnType, currentCategory);
+      checkAddTransactionBalance();
+    } else {
+      populateCategorySelect(document.getElementById('edit-txn-category'), txnType, currentCategory);
+      checkEditTransactionBalance();
+    }
+  }
+
+  function openTransactionModal(defaultType) {
+    var txnType = defaultType === 'income' ? 'income' : 'expense';
+    var form = document.getElementById('addTransactionForm');
+    if (form) {
+      form.reset();
+    }
+    var radioExp = document.getElementById('txn-type-expense');
+    var radioInc = document.getElementById('txn-type-income');
+    if (radioExp) radioExp.checked = (txnType === 'expense');
+    if (radioInc) radioInc.checked = (txnType === 'income');
+
+    var dateInput = document.getElementById('txn-date');
+    if (dateInput) {
+      dateInput.value = getTodayIso();
+    }
+    syncTransactionModalType('add', txnType);
+    var modal = document.getElementById('modal-transaction');
+    if (modal) modal.classList.add('active');
+  }
+
+  function openEditTransactionModal(btn) {
+    var d = btn.dataset;
+    var txnType = d.type === 'income' ? 'income' : 'expense';
+    var form = document.getElementById('editTransactionForm');
+    var origAmount = parseFloat(d.amount || '0');
+    if (form) {
+      form.action = '/edit-transaction/' + d.id;
+      form.dataset.origAccountId = d.accountId || '';
+      form.dataset.origDelta = String(txnType === 'income' ? origAmount : -origAmount);
+    }
+    var radioExp = document.getElementById('edit-txn-type-expense');
+    var radioInc = document.getElementById('edit-txn-type-income');
+    if (radioExp) radioExp.checked = (txnType === 'expense');
+    if (radioInc) radioInc.checked = (txnType === 'income');
+
+    document.getElementById('edit-txn-title').value = d.title || '';
+    document.getElementById('edit-txn-amount').value = d.amount || '';
+    document.getElementById('edit-txn-date').value = d.date || getTodayIso();
+    document.getElementById('edit-txn-notes').value = d.notes || '';
+    document.getElementById('edit-txn-account').value = d.accountId || '';
+
+    var modeSelect = document.getElementById('edit-txn-payment-mode');
+    if (modeSelect && d.mode) {
+      var found = false;
+      for (var i = 0; i < modeSelect.options.length; i++) {
+        if (modeSelect.options[i].value === d.mode) {
+          modeSelect.selectedIndex = i;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        var extraMode = document.createElement('option');
+        extraMode.value = d.mode;
+        extraMode.textContent = d.mode;
+        extraMode.selected = true;
+        modeSelect.appendChild(extraMode);
+      }
+    }
+
+    syncTransactionModalType('edit', txnType, d.category || '');
+    openModal('modal-edit-transaction');
+  }
+
   function openModal(id) {
+    if (id === 'modal-transaction') {
+      openTransactionModal('expense');
+      return;
+    }
     var modal = document.getElementById(id);
     if (modal) modal.classList.add('active');
   }
@@ -339,8 +659,18 @@
     if (modal) modal.classList.remove('active');
   }
 
-  function handleBackdropClick(e, id) {
-    if (e.target.id === id) closeModal(id);
+  function openMobileSidebar() {
+    var sb = document.getElementById('app-sidebar');
+    var bd = document.getElementById('sidebar-backdrop');
+    if (sb) sb.classList.add('mobile-open');
+    if (bd) bd.classList.add('active');
+  }
+
+  function closeMobileSidebar() {
+    var sb = document.getElementById('app-sidebar');
+    var bd = document.getElementById('sidebar-backdrop');
+    if (sb) sb.classList.remove('mobile-open');
+    if (bd) bd.classList.remove('active');
   }
 
   function toggleNotificationDropdown() {
@@ -348,7 +678,79 @@
     if (d) d.classList.toggle('active');
   }
 
+  function dismissToast(el) {
+    if (!el || el.classList.contains('toast-dismissing')) return;
+    el.classList.add('toast-dismissing');
+    setTimeout(function() {
+      if (el.parentElement) el.parentElement.removeChild(el);
+    }, 260);
+  }
+
+  function animateKpiNumbers() {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+    var els = document.querySelectorAll('.kpi-figure.font-mono, .kpi-value.font-mono');
+    els.forEach(function(el) {
+      var original = el.textContent.trim();
+      var m = original.match(/^([^0-9]*)([0-9][0-9,]*(?:\.[0-9]+)?)(.*)$/);
+      if (!m) return;
+      var prefix = m[1];
+      var numStr = m[2];
+      var suffix = m[3];
+      var target = parseFloat(numStr.replace(/,/g, ''));
+      if (!Number.isFinite(target) || target === 0) return;
+
+      var numParts = numStr.split('.');
+      var decimals = numParts.length > 1 ? numParts[1].length : 0;
+      var duration = 600;
+      var startTs = null;
+
+      function step(ts) {
+        if (!startTs) startTs = ts;
+        var progress = Math.min((ts - startTs) / duration, 1);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        var current = target * eased;
+        var formatted = current.toLocaleString(undefined, {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals
+        });
+        el.textContent = progress >= 1 ? original : (prefix + formatted + suffix);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        }
+      }
+      requestAnimationFrame(step);
+    });
+  }
+
+  document.addEventListener('submit', function(e) {
+    if (e.defaultPrevented) return;
+    var form = e.target;
+    if (!form || !form.method || form.method.toLowerCase() !== 'post') return;
+    if (form.dataset.noDisable === '1') return;
+
+    if (form.dataset.submitting === '1') {
+      e.preventDefault();
+      return;
+    }
+    form.dataset.submitting = '1';
+
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn) {
+      btn.disabled = true;
+      var isIconOnly = btn.classList.contains('header-icon-btn') || btn.classList.contains('btn-delete-row') || btn.classList.contains('btn-budget-delete') || btn.classList.contains('action-btn');
+      if (!isIconOnly) {
+        btn.classList.add('is-submitting');
+        btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span><span>Saving...</span>';
+      }
+    }
+  });
+
   document.addEventListener('click', function(e) {
+    if (e.target && e.target.id === 'sidebar-backdrop') {
+      closeMobileSidebar();
+    }
     if (e.target && e.target.classList && e.target.classList.contains('modal-backdrop')) {
       e.target.classList.remove('active');
     }
@@ -364,24 +766,34 @@
       document.querySelectorAll('.modal-backdrop.active').forEach(function(m) {
         m.classList.remove('active');
       });
+      closeMobileSidebar();
     }
   });
 
+  if (typeof Chart !== 'undefined') {
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    Chart.defaults.animation = reduced ? false : { duration: 750, easing: 'easeOutQuart' };
+    Chart.defaults.plugins.tooltip.cornerRadius = 8;
+    Chart.defaults.plugins.tooltip.padding = 10;
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('[data-width]').forEach(function(el) {
-      el.style.width = el.dataset.width + '%';
-    });
     document.querySelectorAll('[data-bg]').forEach(function(el) {
       el.style.backgroundColor = el.dataset.bg;
     });
-    var dateInput = document.getElementById('txn-date');
-    if (dateInput && !dateInput.value) {
-      var now = new Date();
-      var yyyy = now.getFullYear();
-      var mm = String(now.getMonth() + 1).padStart(2, '0');
-      var dd = String(now.getDate()).padStart(2, '0');
-      dateInput.value = yyyy + '-' + mm + '-' + dd;
-    }
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        document.querySelectorAll('[data-width]').forEach(function(el) {
+          el.style.width = el.dataset.width + '%';
+        });
+      });
+    });
+    animateKpiNumbers();
+    document.querySelectorAll('.toast-alert').forEach(function(toast) {
+      setTimeout(function() {
+        dismissToast(toast);
+      }, 5000);
+    });
   });
 </script>
 {% endblock %}

@@ -8,44 +8,44 @@
   <div class="module-summary-grid">
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Aggregated Net Balance</span>
+        <span class="kpi-label">Total Balance</span>
         <span class="kpi-icon-pill icon-inflow">&#9670;</span>
       </div>
       <div class="kpi-figure {% if total_balance >= 0 %}text-blue{% else %}text-danger{% endif %} font-mono">{{ format_money(total_balance) }}</div>
       <div class="kpi-sub">
-        <span>Across all linked financial assets</span>
+        <span>Combined across all your accounts</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Commercial Bank Deposits</span>
+        <span class="kpi-label">Bank Accounts</span>
         <span class="kpi-icon-pill icon-budget">B</span>
       </div>
       <div class="kpi-figure text-blue font-mono">{{ format_money(bank_balance) }}</div>
       <div class="kpi-sub">
-        <span>Liquid depository holdings</span>
+        <span>Total money in checking &amp; savings</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Credit Cards &amp; Liabilities</span>
+        <span class="kpi-label">Credit Cards</span>
         <span class="kpi-icon-pill icon-outflow">C</span>
       </div>
       <div class="kpi-figure {% if card_balance < 0 %}text-danger{% else %}text-dark{% endif %} font-mono">{{ format_money(card_balance) }}</div>
       <div class="kpi-sub">
-        <span>Revolving credit card balance</span>
+        <span>Current credit card balance</span>
       </div>
     </div>
   </div>
 
   <div class="toolbar-flex-header">
     <div>
-      <h3 class="section-title">Linked Accounts &amp; Wallets</h3>
-      <p class="section-subtitle">Track multi-entity depository balances, revolving lines, and digital wallets.</p>
+      <h3 class="section-title">Your Accounts &amp; Wallets</h3>
+      <p class="section-subtitle">Keep track of your bank accounts, credit cards, digital wallets, and cash in one place.</p>
     </div>
-    <button type="button" class="btn-action-primary" onclick="openModal('modal-add-account')">+ Add Account / Wallet</button>
+    <button type="button" class="btn-action-primary" onclick="openModal('modal-add-account')">+ Add Account</button>
   </div>
 
   <div class="accounts-grid">
@@ -58,7 +58,7 @@
           </div>
           <form method="POST" action="{{ url_for('delete_account', account_id=a.id) }}" style="display:inline;" data-confirm="Remove account {{ a.name }}?" onsubmit="return confirm(this.dataset.confirm);">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-            <button type="submit" class="btn-budget-delete" title="Delete account">&times;</button>
+            <button type="submit" class="btn-budget-delete" title="Delete account" aria-label="Delete account">&times;</button>
           </form>
         </div>
 
@@ -68,12 +68,16 @@
         </div>
 
         <div class="account-card-bottom">
-          <span class="text-xs text-muted">ID: #ACC-{{ a.id }}</span>
-          <span class="acc-status-pill">&#10003; Reconciled</span>
+          <span class="text-xs text-muted">Account #{{ a.id }}</span>
+          <span class="acc-status-pill">&#10003; Active</span>
         </div>
       </div>
     {% else %}
-      <div class="empty-budget-state" style="grid-column: 1 / -1;">No financial accounts linked. Click "+ Add Account / Wallet" above to initialize your ledger.</div>
+      <div class="empty-budget-state" style="grid-column: 1 / -1;">
+        <div class="empty-state-title">No accounts added yet</div>
+        <p class="empty-state-desc">Add a bank account, wallet, or cash balance so FinSight can update it whenever you add income or expenses.</p>
+        <button type="button" class="btn-action-primary" onclick="openModal('modal-add-account')">+ Add Your First Account</button>
+      </div>
     {% endfor %}
   </div>
 
@@ -83,48 +87,71 @@
   <div class="modal-dialog">
     <div class="modal-header">
       <div>
-        <h3 class="modal-title">Link Financial Account / Wallet</h3>
-        <p class="modal-subtitle">Configure an institution, payment wallet, or cash register.</p>
+        <h3 class="modal-title">Add an Account or Wallet</h3>
+        <p class="modal-subtitle">Add a bank account, credit card, UPI wallet, or cash on hand.</p>
       </div>
-      <button type="button" class="modal-close" onclick="closeModal('modal-add-account')">&times;</button>
+      <button type="button" class="modal-close" onclick="closeModal('modal-add-account')" aria-label="Close modal">&times;</button>
     </div>
 
     <form method="POST" action="{{ url_for('add_account') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
       <div class="modal-body">
-        
+
         <div class="field-group">
-          <label for="acc-name" class="field-label">Account Name / Institution</label>
-          <input type="text" id="acc-name" name="name" class="field-input" placeholder="e.g. Chase Business Checking or ICICI Savings" required>
+          <label for="acc-name" class="field-label">Account Name *</label>
+          <input type="text" id="acc-name" name="name" class="field-input" placeholder="e.g. HDFC Savings, Everyday Wallet, Cash" required>
         </div>
 
         <div class="field-row-grid">
           <div class="field-group">
             <label for="acc-type" class="field-label">Account Type</label>
-            <select id="acc-type" name="account_type" class="field-input">
-              <option value="Bank">Bank Checking / Savings</option>
+            <select id="acc-type" name="account_type" class="field-input" onchange="checkNewAccountBalance()">
+              <option value="Bank">Bank Account (Checking / Savings)</option>
               <option value="Credit Card">Credit Card</option>
               <option value="Wallet">Digital Wallet (UPI / PayPal)</option>
-              <option value="Cash">Physical Cash Reserve</option>
+              <option value="Cash">Cash</option>
             </select>
           </div>
           <div class="field-group">
-            <label for="acc-balance" class="field-label">Initial Balance ({{ currency_symbol }})</label>
+            <label for="acc-balance" class="field-label">Starting Balance ({{ currency_symbol }})</label>
             <div class="input-with-prefix">
               <span class="input-prefix font-bold">{{ currency_symbol }}</span>
-              <input type="number" step="0.01" id="acc-balance" name="balance" class="field-input prefix-padded font-mono" placeholder="0.00" value="0.00">
+              <input type="number" step="0.01" id="acc-balance" name="balance" class="field-input prefix-padded font-mono" placeholder="0.00" value="0.00" oninput="checkNewAccountBalance()">
             </div>
-            <span class="field-hint">Use negative value for owed credit card liabilities</span>
+            <span class="field-hint">Only Credit Card accounts can start with a negative balance.</span>
           </div>
         </div>
+        <div id="new-acc-balance-warning" class="balance-warning-box" role="alert"></div>
 
       </div>
 
       <div class="modal-footer">
         <button type="button" class="btn-secondary" onclick="closeModal('modal-add-account')">Cancel</button>
-        <button type="submit" class="btn-primary" style="width:auto; padding:0 24px;">Link Account</button>
+        <button type="submit" id="new-acc-submit" class="btn-primary btn-auto-width">Save Account</button>
       </div>
     </form>
   </div>
 </div>
+
+<script>
+  function checkNewAccountBalance() {
+    var typeEl = document.getElementById('acc-type');
+    var balEl = document.getElementById('acc-balance');
+    var warnEl = document.getElementById('new-acc-balance-warning');
+    var submitEl = document.getElementById('new-acc-submit');
+    if (!typeEl || !balEl || !warnEl || !submitEl) return;
+
+    var bal = parseFloat(balEl.value);
+    var isCard = typeEl.value === 'Credit Card';
+    if (!isCard && Number.isFinite(bal) && bal < 0) {
+      warnEl.textContent = 'Only Credit Card accounts can start with a negative balance.';
+      warnEl.classList.add('visible');
+      submitEl.disabled = true;
+    } else {
+      warnEl.textContent = '';
+      warnEl.classList.remove('visible');
+      submitEl.disabled = false;
+    }
+  }
+</script>
 {% endblock %}

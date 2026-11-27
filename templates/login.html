@@ -10,32 +10,32 @@
         <span class="logo-icon">&#9670;</span>
         <div class="logo-meta">
           <span class="logo-text">FinSight</span>
-          <span class="logo-subtext">Milestone 1: Core Finance</span>
+          <span class="logo-subtext">Simple Money Tracker</span>
         </div>
       </div>
-      <h2 class="brand-headline">Unified financial intelligence across every department.</h2>
-      <p class="brand-sub">Access real-time P&amp;L performance metrics, category budget variances, cashflow forecasting, and multi-entity retail ledgers across 20 global currencies.</p>
+      <h2 class="brand-headline">A clear, calm view of all your money in one place.</h2>
+      <p class="brand-sub">Track daily expenses, income, monthly budgets, investments, and savings goals across 20 world currencies.</p>
       
       <div class="brand-features">
         <div class="feature-item">
           <span class="feature-icon">&#10003;</span>
           <div>
-            <strong>Role-Enforced Access Control</strong>
-            <span>Securely authenticate under your designated workspace role.</span>
+            <strong>Role-Based Accounts</strong>
+            <span>Sign in securely to your personal, shop owner, or admin workspace.</span>
           </div>
         </div>
         <div class="feature-item">
           <span class="feature-icon">&#10003;</span>
           <div>
-            <strong>Multi-Currency Financial Engine</strong>
-            <span>Generate dynamic P&amp;L statements in USD, EUR, GBP, INR, JPY, and more.</span>
+            <strong>20 World Currencies</strong>
+            <span>Switch effortlessly between INR, USD, EUR, GBP, JPY, and 15 more.</span>
           </div>
         </div>
         <div class="feature-item">
           <span class="feature-icon">&#10003;</span>
           <div>
-            <strong>Proactive Budget Telemetry</strong>
-            <span>Enforce hard and advisory spending caps with variance telemetry.</span>
+            <strong>Smart Budget Alerts</strong>
+            <span>Get clear warnings before you overspend on any category.</span>
           </div>
         </div>
       </div>
@@ -69,6 +69,7 @@
 
       <form method="POST" action="{{ url_for('login') }}" novalidate>
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="next" value="{{ request.args.get('next', '') }}"/>
 
         <div class="field-group">
           <span class="field-label">Select Type of Login</span>

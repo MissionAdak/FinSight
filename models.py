@@ -179,7 +179,7 @@ class Investment(BaseModel):
     created_at     = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at     = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    history        = db.relationship('PortfolioHistory', backref='investment', cascade=CASCADE_ALL_DELETE_ORPHAN, lazy=True)
+    history        = db.relationship('PortfolioHistory', backref='investment', passive_deletes=False, lazy=True)
 
     @property
     def invested_value(self):

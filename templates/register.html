@@ -192,16 +192,16 @@
         </div>
 
         <div class="field-group">
-          <span class="field-label">Account Role &amp; Financial Scope</span>
-          <div class="role-selector-grid">
-            
-            <label class="role-card {% if selected_role == 'user' %}active{% endif %}">
-              <input type="radio" name="role" value="user" {% if selected_role == 'user' %}checked{% endif %} onchange="updateRoleUI(this.value)">
+          <span class="field-label">Account Type</span>
+          <div class="role-selector-grid-2">
+
+            <label class="role-card {% if selected_role == 'user' or not selected_role %}active{% endif %}">
+              <input type="radio" name="role" value="user" {% if selected_role == 'user' or not selected_role %}checked{% endif %} onchange="updateRoleUI(this.value)">
               <div class="role-card-body">
                 <div class="role-header-line">
                   <span class="role-title">Standard User</span>
                 </div>
-                <span class="role-desc">Personal budgets, income &amp; savings tracking</span>
+                <span class="role-desc">Personal budgets, income, investments &amp; savings goals</span>
               </div>
             </label>
 
@@ -211,17 +211,7 @@
                 <div class="role-header-line">
                   <span class="role-title">Shop Owner</span>
                 </div>
-                <span class="role-desc">Store sales, wholesale inventory &amp; POS expenses</span>
-              </div>
-            </label>
-
-            <label class="role-card {% if selected_role == 'admin' %}active{% endif %}">
-              <input type="radio" name="role" value="admin" {% if selected_role == 'admin' %}checked{% endif %} onchange="updateRoleUI(this.value)">
-              <div class="role-card-body">
-                <div class="role-header-line">
-                  <span class="role-title">Administrator</span>
-                </div>
-                <span class="role-desc">Consolidated platform P&amp;L &amp; audit controls</span>
+                <span class="role-desc">Store sales, stock purchases &amp; shop expenses</span>
               </div>
             </label>
 
@@ -363,19 +353,13 @@
       bizOptional.textContent = '(Required)';
       bizOptional.style.color = '#f97316';
       bizInput.placeholder = 'e.g. Westside Supermarket & Retail Store';
-      bizHint.textContent = 'This name will appear on your store financial reports and inventory sheets.';
-    } else if (selectedRole === 'admin') {
-      bizLabel.textContent = 'Organization / Enterprise Entity';
-      bizOptional.textContent = '(Optional)';
-      bizOptional.style.color = '#64748b';
-      bizInput.placeholder = 'e.g. FinSight Global Holdings';
-      bizHint.textContent = 'Appears on system-wide audit reports and consolidated P&L statements.';
+      bizHint.textContent = 'This name will appear on your store reports and summaries.';
     } else {
-      bizLabel.textContent = 'Portfolio / Workspace Label';
+      bizLabel.textContent = 'Workspace Label';
       bizOptional.textContent = '(Optional)';
       bizOptional.style.color = '#64748b';
-      bizInput.placeholder = 'e.g. Personal Wealth & Budget Tracker';
-      bizHint.textContent = 'Custom label for your personal finance dashboard.';
+      bizInput.placeholder = 'e.g. Personal Money Tracker';
+      bizHint.textContent = 'Optional custom name for your personal dashboard.';
     }
   }
 

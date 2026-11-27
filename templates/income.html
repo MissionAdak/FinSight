@@ -1,6 +1,6 @@
 {% extends "base_app.html" %}
 
-{% block title %}Income &amp; Inflows — FinSight{% endblock %}
+{% block title %}Income — FinSight{% endblock %}
 
 {% block content %}
 <div class="module-page-container">
@@ -8,34 +8,43 @@
   <div class="module-summary-grid">
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Total Inflow</span>
+        <span class="kpi-label">
+          Total Income (Money In)
+          {% if is_filtered %}<span class="kpi-filtered-pill">Filtered</span>{% endif %}
+        </span>
         <span class="kpi-icon-pill icon-inflow">&#8593;</span>
       </div>
-      <div class="kpi-figure text-blue font-mono">{{ format_money(total_income) }}</div>
+      <div class="kpi-figure text-green font-mono">{{ format_money(total_income) }}</div>
       <div class="kpi-sub">
-        <span>Across {{ transactions|length }} recorded revenues</span>
+        <span>Across {{ transactions|length }} {{ 'income entry' if transactions|length == 1 else 'income entries' }} shown</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Average Inflow</span>
+        <span class="kpi-label">
+          Average Income
+          {% if is_filtered %}<span class="kpi-filtered-pill">Filtered</span>{% endif %}
+        </span>
         <span class="kpi-icon-pill icon-budget">&#8764;</span>
       </div>
       <div class="kpi-figure text-blue font-mono">{{ format_money(avg_income) }}</div>
       <div class="kpi-sub">
-        <span>Mean deposit volume</span>
+        <span>Average per payment received</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Top Income Source</span>
+        <span class="kpi-label">
+          Top Income Source
+          {% if is_filtered %}<span class="kpi-filtered-pill">Filtered</span>{% endif %}
+        </span>
         <span class="kpi-icon-pill icon-savings">&#9670;</span>
       </div>
       <div class="kpi-figure text-blue text-lg font-bold">{{ top_source }}</div>
       <div class="kpi-sub">
-        <span>Largest revenue stream</span>
+        <span>Your biggest source of income</span>
       </div>
     </div>
   </div>
@@ -43,14 +52,24 @@
   <div class="filter-toolbar-card">
     <form method="GET" action="{{ url_for('income') }}" class="filter-form">
       <div class="filter-group-input">
-        <label for="income-search" class="sr-only">Search revenue</label>
-        <input type="text" id="income-search" name="q" value="{{ search }}" placeholder="Search revenue, client or notes..." class="field-input">
+        <label for="income-search" class="sr-only">Search income</label>
+        <input type="text" id="income-search" name="q" value="{{ search }}" placeholder="Search by source, client, or note..." class="field-input">
+      </div>
+
+      <div class="filter-group-select">
+        <label for="income-month" class="sr-only">Filter by month</label>
+        <select id="income-month" name="month" class="field-input">
+          <option value="">All Time</option>
+          {% for mo in month_options %}
+            <option value="{{ mo.value }}" {% if selected_month == mo.value %}selected{% endif %}>{{ mo.label }}</option>
+          {% endfor %}
+        </select>
       </div>
 
       <div class="filter-group-select">
         <label for="income-category" class="sr-only">Filter by category</label>
         <select id="income-category" name="category" class="field-input">
-          <option value="">All Categories</option>
+          <option value="">All Sources</option>
           {% for c in categories %}
             <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
           {% endfor %}
@@ -58,9 +77,9 @@
       </div>
 
       <div class="filter-group-select">
-        <label for="income-mode" class="sr-only">Filter by payment mode</label>
+        <label for="income-mode" class="sr-only">Filter by payment method</label>
         <select id="income-mode" name="mode" class="field-input">
-          <option value="">All Payment Modes</option>
+          <option value="">All Payment Methods</option>
           {% for m in payment_modes %}
             <option value="{{ m }}" {% if selected_mode == m %}selected{% endif %}>{{ m }}</option>
           {% endfor %}
@@ -68,15 +87,15 @@
       </div>
 
       <div class="filter-actions">
-        <button type="submit" class="btn-primary" style="width:auto; padding:0 18px;">Apply Filter</button>
-        {% if search or selected_category or selected_mode %}
+        <button type="submit" class="btn-primary btn-auto-width">Filter</button>
+        {% if is_filtered %}
           <a href="{{ url_for('income') }}" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">Clear</a>
         {% endif %}
       </div>
     </form>
 
     <div class="toolbar-right-action">
-      <button type="button" class="btn-action-primary" onclick="openModal('modal-transaction')">+ Log Inflow</button>
+      <button type="button" class="btn-qa btn-qa-income" onclick="openTransactionModal('income')">+ Add Income</button>
     </div>
   </div>
 
@@ -87,10 +106,10 @@
           <tr>
             <th>Date</th>
             <th>Description</th>
-            <th>Category</th>
-            <th>Payment Mode</th>
+            <th>Source / Category</th>
+            <th>Payment Method</th>
             <th class="text-right">Amount</th>
-            <th class="text-right">Action</th>
+            <th class="text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -105,17 +124,31 @@
               </td>
               <td><span class="tag-category">{{ t.category }}</span></td>
               <td><span class="tag-mode">{{ t.payment_mode or 'Bank Transfer' }}</span></td>
-              <td class="text-right font-mono font-bold text-blue">+{{ format_money(t.amount) }}</td>
+              <td class="text-right font-mono font-bold text-green">+{{ format_money(t.amount) }}</td>
               <td class="text-right">
-                <form method="POST" action="{{ url_for('delete_transaction', txn_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Delete this income record?');">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-                  <button type="submit" class="btn-delete-row" title="Delete record">&times;</button>
-                </form>
+                <div class="row-actions-group">
+                  <button type="button" class="btn-edit-row" data-id="{{ t.id }}" data-title="{{ t.title }}" data-category="{{ t.category }}" data-amount="{{ t.amount }}" data-type="income" data-mode="{{ t.payment_mode or 'Bank Transfer' }}" data-account-id="{{ t.account_id or '' }}" data-date="{{ t.date }}" data-notes="{{ t.notes or '' }}" onclick="openEditTransactionModal(this)">Edit</button>
+                  <form method="POST" action="{{ url_for('delete_transaction', txn_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Delete this income entry?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                    <button type="submit" class="btn-delete-row" title="Delete income" aria-label="Delete income">&times;</button>
+                  </form>
+                </div>
               </td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="6" class="empty-table-state">No matching revenues found for this query.</td>
+              <td colspan="6">
+                <div class="empty-state-box">
+                  <div class="empty-state-title">{% if is_filtered %}No income entries match your filters{% else %}No income recorded yet{% endif %}</div>
+                  <p class="empty-state-desc">{% if is_filtered %}Try clearing your filters or picking another month.{% else %}Add your salary, business sales, or side income to track how much money comes in.{% endif %}</p>
+                  <div class="empty-state-actions">
+                    {% if is_filtered %}
+                      <a href="{{ url_for('income') }}" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">Clear Filters</a>
+                    {% endif %}
+                    <button type="button" class="btn-qa btn-qa-income" onclick="openTransactionModal('income')">+ Add Income</button>
+                  </div>
+                </div>
+              </td>
             </tr>
           {% endfor %}
         </tbody>

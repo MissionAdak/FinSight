@@ -1,37 +1,39 @@
 {% extends "base_app.html" %}
 
+{% block title %}Investments — FinSight{% endblock %}
+
 {% block content %}
 <div class="page-container">
   <div class="page-header-row">
     <div>
-      <h2 class="page-title">Investment Portfolio &amp; Wealth Analytics</h2>
-      <p class="page-subtitle">Track multi-asset holdings, benchmark performance, and asset class distributions.</p>
+      <h2 class="page-title">Your Investments</h2>
+      <p class="page-subtitle">See what you own, how much it has grown, and whether your mix is well balanced.</p>
     </div>
     <div class="page-actions">
-      <a href="{{ url_for('export_investments_csv') }}" class="btn-secondary" title="Export Holdings as CSV">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <a href="{{ url_for('export_investments_csv') }}" class="btn-secondary" title="Download investments as CSV">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span>Export CSV</span>
       </a>
-      <button type="button" class="btn-primary" onclick="openModal('modal-add-investment')">
-        <span class="btn-plus-icon">+</span> Add Holding
+      <button type="button" class="btn-primary" onclick="openAddInvestmentModal()">
+        <span class="btn-plus-icon">+</span> Add Investment
       </button>
     </div>
   </div>
 
-  <div class="subnav-tabs-bar">
-    <button type="button" class="subnav-tab {% if active_tab == 'overview' %}active{% endif %}" onclick="switchInvTab('overview')">
-      Portfolio Overview
+  <div class="subnav-tabs-bar" role="tablist">
+    <button type="button" class="subnav-tab {% if active_tab == 'overview' %}active{% endif %}" data-tab="overview" onclick="switchInvTab('overview')">
+      Overview
     </button>
-    <button type="button" class="subnav-tab {% if active_tab == 'holdings' %}active{% endif %}" onclick="switchInvTab('holdings')">
-      Holdings ({{ investments|length }})
+    <button type="button" class="subnav-tab {% if active_tab == 'holdings' %}active{% endif %}" data-tab="holdings" onclick="switchInvTab('holdings')">
+      My Holdings ({{ investments|length }})
     </button>
-    <button type="button" class="subnav-tab {% if active_tab == 'transactions' %}active{% endif %}" onclick="switchInvTab('transactions')">
-      Transactions
+    <button type="button" class="subnav-tab {% if active_tab == 'transactions' %}active{% endif %}" data-tab="transactions" onclick="switchInvTab('transactions')">
+      History
     </button>
-    <button type="button" class="subnav-tab {% if active_tab == 'allocation' %}active{% endif %}" onclick="switchInvTab('allocation')">
-      Asset Allocation
+    <button type="button" class="subnav-tab {% if active_tab == 'allocation' %}active{% endif %}" data-tab="allocation" onclick="switchInvTab('allocation')">
+      Asset Mix
     </button>
-    <button type="button" class="subnav-tab {% if active_tab == 'performance' %}active{% endif %}" onclick="switchInvTab('performance')">
+    <button type="button" class="subnav-tab {% if active_tab == 'performance' %}active{% endif %}" data-tab="performance" onclick="switchInvTab('performance')">
       Performance &amp; Risk
     </button>
   </div>
@@ -42,36 +44,36 @@
         <div class="kpi-header">
           <span class="kpi-title">Total Portfolio Value</span>
           <div class="kpi-icon-wrap icon-blue">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
           </div>
         </div>
         <div class="kpi-value font-mono">{{ format_money(total_portfolio_value) }}</div>
         <div class="kpi-footer">
           <span class="kpi-badge {% if overall_return >= 0 %}badge-success{% else %}badge-danger{% endif %} font-mono">
-            {% if overall_return >= 0 %}+{% endif %}{{ overall_return_pct }}% All-Time
+            {% if overall_return >= 0 %}+{% endif %}{{ overall_return_pct }}% Overall
           </span>
-          <span class="kpi-meta font-mono">{{ currency_code }} Valued</span>
+          <span class="kpi-meta">Current value in {{ currency_code }}</span>
         </div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-header">
-          <span class="kpi-title">Total Invested Capital</span>
+          <span class="kpi-title">Total Amount Invested</span>
           <div class="kpi-icon-wrap icon-purple">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
           </div>
         </div>
         <div class="kpi-value font-mono">{{ format_money(total_invested) }}</div>
         <div class="kpi-footer">
-          <span class="kpi-meta">Cost Basis across {{ investments|length }} holdings</span>
+          <span class="kpi-meta">Money put in across {{ investments|length }} {{ 'investment' if investments|length == 1 else 'investments' }}</span>
         </div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-header">
-          <span class="kpi-title">Overall Net Returns</span>
+          <span class="kpi-title">Total Profit / Loss</span>
           <div class="kpi-icon-wrap {% if overall_return >= 0 %}icon-green{% else %}icon-red{% endif %}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
           </div>
         </div>
         <div class="kpi-value font-mono {% if overall_return >= 0 %}text-green{% else %}text-red{% endif %}">
@@ -81,15 +83,15 @@
           <span class="kpi-badge {% if overall_return >= 0 %}badge-success{% else %}badge-danger{% endif %} font-mono">
             {% if overall_return >= 0 %}&#8599;{% else %}&#8600;{% endif %} {{ overall_return_pct }}%
           </span>
-          <span class="kpi-meta">Unrealized Capital Gains</span>
+          <span class="kpi-meta">Profit or loss since buying</span>
         </div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-header">
-          <span class="kpi-title">Today's Day Change</span>
+          <span class="kpi-title">Today's Change</span>
           <div class="kpi-icon-wrap {% if today_change_value >= 0 %}icon-green{% else %}icon-red{% endif %}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
           </div>
         </div>
         <div class="kpi-value font-mono {% if today_change_value >= 0 %}text-green{% else %}text-red{% endif %}">
@@ -99,7 +101,7 @@
           <span class="kpi-badge {% if today_change_value >= 0 %}badge-success{% else %}badge-danger{% endif %} font-mono">
             {% if today_change_value >= 0 %}+{% endif %}{{ today_change_pct }}%
           </span>
-          <span class="kpi-meta">Intraday Valuation Delta</span>
+          <span class="kpi-meta">Change since yesterday</span>
         </div>
       </div>
     </div>
@@ -108,43 +110,54 @@
       <div class="chart-card">
         <div class="chart-header">
           <div>
-            <h3 class="chart-title">Asset Allocation</h3>
-            <p class="chart-subtitle">Distribution across equity, funds, debt and cash</p>
+            <h3 class="chart-title">
+              Asset Allocation
+              <button type="button" class="help-tip" data-tip="How your investments are spread across stocks, mutual funds, gold, and cash to lower risk." aria-label="What is Asset Allocation">?</button>
+            </h3>
+            <p class="chart-subtitle">How your money is divided across investment types</p>
           </div>
           <button type="button" class="btn-text-link" onclick="switchInvTab('allocation')">
             View full allocation &rarr;
           </button>
         </div>
-        <div class="donut-chart-layout">
-          <div class="donut-canvas-container">
-            <canvas id="assetAllocationChart" data-labels="{{ allocation_breakdown|map(attribute='type')|list|tojson|forceescape }}" data-values="{{ allocation_breakdown|map(attribute='value')|list|tojson|forceescape }}" data-currency="{{ currency_symbol }}"></canvas>
-            <div class="donut-center-overlay">
-              <span class="donut-center-label">Portfolio</span>
-              <span class="donut-center-val font-mono">{{ format_money(total_portfolio_value) }}</span>
+        {% if allocation_breakdown %}
+          <div class="donut-chart-layout">
+            <div class="donut-canvas-container">
+              <canvas id="assetAllocationChart" data-labels="{{ allocation_breakdown|map(attribute='type')|list|tojson|forceescape }}" data-values="{{ allocation_breakdown|map(attribute='value')|list|tojson|forceescape }}" data-currency="{{ currency_symbol }}"></canvas>
+              <div class="donut-center-overlay">
+                <span class="donut-center-label">Portfolio</span>
+                <span class="donut-center-val font-mono">{{ format_money(total_portfolio_value) }}</span>
+              </div>
+            </div>
+            <div class="allocation-legend-list">
+              {% for item in allocation_breakdown %}
+                <div class="alloc-legend-row">
+                  <div class="alloc-legend-left">
+                    <span class="alloc-color-dot alloc-dot-{{ loop.index0 % 7 }}"></span>
+                    <span class="alloc-name">{{ item.type }}</span>
+                  </div>
+                  <div class="alloc-legend-right font-mono">
+                    <span class="alloc-amount">{{ format_money(item.value) }}</span>
+                    <span class="alloc-pct">{{ item.share_pct }}%</span>
+                  </div>
+                </div>
+              {% endfor %}
             </div>
           </div>
-          <div class="allocation-legend-list">
-            {% for item in allocation_breakdown %}
-              <div class="alloc-legend-row">
-                <div class="alloc-legend-left">
-                  <span class="alloc-color-dot alloc-dot-{{ loop.index0 % 7 }}"></span>
-                  <span class="alloc-name">{{ item.type }}</span>
-                </div>
-                <div class="alloc-legend-right font-mono">
-                  <span class="alloc-amount">{{ format_money(item.value) }}</span>
-                  <span class="alloc-pct">{{ item.share_pct }}%</span>
-                </div>
-              </div>
-            {% endfor %}
+        {% else %}
+          <div class="empty-state-box">
+            <div class="empty-state-title">No investments yet</div>
+            <p class="empty-state-desc">Add a stock, mutual fund, gold, or cash holding to see your asset mix.</p>
+            <button type="button" class="btn-primary btn-auto-width" onclick="openAddInvestmentModal()">+ Add Investment</button>
           </div>
-        </div>
+        {% endif %}
       </div>
 
       <div class="chart-card">
         <div class="chart-header">
           <div>
-            <h3 class="chart-title">Portfolio Performance vs NIFTY 50</h3>
-            <p class="chart-subtitle">Cumulative return tracking over historical intervals</p>
+            <h3 class="chart-title">Your Growth vs. Market Average (NIFTY 50)</h3>
+            <p class="chart-subtitle">How your returns compare with the broader market over time</p>
           </div>
           <div class="timeframe-pill-selector">
             <button type="button" class="tf-btn active" data-tf="all" onclick="filterPerfChart('all', this)">All</button>
@@ -163,10 +176,13 @@
           </div>
           <div class="perf-legend-item">
             <span class="perf-legend-line line-benchmark"></span>
-            <span>NIFTY 50 Benchmark: <strong>12.5%</strong></span>
+            <span>NIFTY 50 Average: <strong>{{ chart_benchmark_returns[-1] if chart_benchmark_returns else 0 }}%</strong></span>
           </div>
           <div class="perf-legend-item">
-            <span class="kpi-badge badge-success font-mono">Alpha: +{{ portfolio_alpha }}%</span>
+            <span class="kpi-badge {% if portfolio_alpha >= 0 %}badge-success{% else %}badge-danger{% endif %} font-mono">
+              Alpha: {% if portfolio_alpha >= 0 %}+{% endif %}{{ portfolio_alpha }}%
+            </span>
+            <button type="button" class="help-tip" data-tip="Portfolio Alpha shows how much better or worse your investments did compared to the market average (NIFTY 50)." aria-label="What is Portfolio Alpha">?</button>
           </div>
         </div>
       </div>
@@ -175,7 +191,7 @@
     <div class="charts-grid-two">
       <div class="table-card">
         <div class="table-card-header">
-          <h3 class="table-card-title">Top Holdings</h3>
+          <h3 class="table-card-title">Biggest Holdings</h3>
           <button type="button" class="btn-text-link" onclick="switchInvTab('holdings')">
             View All Holdings &rarr;
           </button>
@@ -184,7 +200,7 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Instrument</th>
+                <th>Investment</th>
                 <th>Type</th>
                 <th class="text-right">Current Value</th>
                 <th class="text-right">Invested</th>
@@ -211,7 +227,12 @@
                 </tr>
               {% else %}
                 <tr>
-                  <td colspan="5" class="empty-table-state">No investment holdings registered yet.</td>
+                  <td colspan="5">
+                    <div class="empty-state-box">
+                      <div class="empty-state-title">No investments recorded yet</div>
+                      <button type="button" class="btn-primary btn-auto-width" onclick="openAddInvestmentModal()">+ Add Investment</button>
+                    </div>
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -221,7 +242,7 @@
 
       <div class="table-card">
         <div class="table-card-header">
-          <h3 class="table-card-title">Active Financial Goals</h3>
+          <h3 class="table-card-title">Your Savings Goals</h3>
           <a href="{{ url_for('goals') }}" class="btn-text-link">
             Manage All Goals &rarr;
           </a>
@@ -250,7 +271,11 @@
               </div>
             </div>
           {% else %}
-            <div class="empty-table-state">No financial goals set. Click Manage All Goals to create your first target.</div>
+            <div class="empty-state-box">
+              <div class="empty-state-title">No savings goals yet</div>
+              <p class="empty-state-desc">Create a goal to link your savings with your future plans.</p>
+              <a href="{{ url_for('goals', new=1) }}" class="btn-primary btn-auto-width" style="text-decoration:none;">+ New Goal</a>
+            </div>
           {% endfor %}
         </div>
       </div>
@@ -261,23 +286,24 @@
     <div class="table-card">
       <div class="ledger-filter-bar">
         <div class="filter-group">
-          <label for="holdingsSearch" class="sr-only">Search instruments or tickers</label>
-          <input type="text" id="holdingsSearch" class="form-control filter-input" placeholder="Search instruments or tickers..." onkeyup="filterHoldingsTable()">
-          <label for="holdingsTypeFilter" class="sr-only">Filter by asset class</label>
+          <label for="holdingsSearch" class="sr-only">Search investments</label>
+          <input type="text" id="holdingsSearch" class="form-control filter-input" placeholder="Search by investment name or symbol..." onkeyup="filterHoldingsTable()">
+          <label for="holdingsTypeFilter" class="sr-only">Filter by investment type</label>
           <select id="holdingsTypeFilter" class="form-control filter-select" onchange="filterHoldingsTable()">
-            <option value="">All Asset Classes</option>
-            <option value="Equity">Equity</option>
+            <option value="">All Types</option>
+            <option value="Equity">Equity (Stocks)</option>
             <option value="Mutual Fund">Mutual Fund</option>
             <option value="ETF">ETF</option>
             <option value="Debt">Debt</option>
             <option value="Bond">Bond</option>
             <option value="Gold">Gold</option>
             <option value="Cash">Cash</option>
+            <option value="Other">Other</option>
           </select>
         </div>
         <div class="filter-actions">
-          <button type="button" class="btn-primary" onclick="openModal('modal-add-investment')">
-            <span class="btn-plus-icon">+</span> Add Holding
+          <button type="button" class="btn-primary btn-auto-width" onclick="openAddInvestmentModal()">
+            <span class="btn-plus-icon">+</span> Add Investment
           </button>
         </div>
       </div>
@@ -286,14 +312,14 @@
         <table class="data-table" id="holdingsTable">
           <thead>
             <tr>
-              <th>Instrument</th>
-              <th>Asset Class</th>
-              <th class="text-right">Qty</th>
+              <th>Investment</th>
+              <th>Type</th>
+              <th class="text-right">Units</th>
               <th class="text-right">Buy Price</th>
-              <th class="text-right">Market Price</th>
+              <th class="text-right">Current Price</th>
               <th class="text-right">Invested</th>
               <th class="text-right">Current Value</th>
-              <th class="text-right">Unrealized P&amp;L</th>
+              <th class="text-right">Profit / Loss</th>
               <th class="text-right">Return</th>
               <th class="text-center">Actions</th>
             </tr>
@@ -325,13 +351,13 @@
                 </td>
                 <td class="text-center">
                   <div class="table-actions-row">
-                    <button type="button" class="action-btn action-edit" title="Edit Holding" data-id="{{ inv.id }}" data-name="{{ inv.asset_name }}" data-qty="{{ inv.quantity }}" data-buy="{{ inv.purchase_price }}" data-curr="{{ inv.current_price }}" data-day="{{ inv.day_change_pct or 0.0 }}" data-notes="{{ inv.notes or '' }}" onclick="openEditInvestmentModal(this)">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    <button type="button" class="action-btn action-edit" title="Edit investment" aria-label="Edit investment" data-id="{{ inv.id }}" data-name="{{ inv.asset_name }}" data-qty="{{ inv.quantity }}" data-buy="{{ inv.purchase_price }}" data-curr="{{ inv.current_price }}" data-day="{{ inv.day_change_pct or 0.0 }}" data-notes="{{ inv.notes or '' }}" onclick="openEditInvestmentModal(this)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                     </button>
-                    <form method="POST" action="{{ url_for('delete_investment', inv_id=inv.id) }}" style="display:inline;" data-confirm="Are you sure you want to remove {{ inv.asset_name }} from your portfolio?" onsubmit="return confirm(this.dataset.confirm);">
+                    <form method="POST" action="{{ url_for('delete_investment', inv_id=inv.id) }}" style="display:inline;" data-confirm="Remove {{ inv.asset_name }} from your investments?" onsubmit="return confirm(this.dataset.confirm);">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                      <button type="submit" class="action-btn action-delete" title="Delete Holding">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      <button type="submit" class="action-btn action-delete" title="Delete investment" aria-label="Delete investment">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                       </button>
                     </form>
                   </div>
@@ -339,7 +365,13 @@
               </tr>
             {% else %}
               <tr>
-                <td colspan="10" class="empty-table-state">No portfolio investments recorded yet. Click "+ Add Holding" to begin.</td>
+                <td colspan="10">
+                  <div class="empty-state-box">
+                    <div class="empty-state-title">No investments added yet</div>
+                    <p class="empty-state-desc">Add your first stock, mutual fund, bond, or gold holding to track its profit and loss.</p>
+                    <button type="button" class="btn-primary btn-auto-width" onclick="openAddInvestmentModal()">+ Add Investment</button>
+                  </div>
+                </td>
               </tr>
             {% endfor %}
           </tbody>
@@ -351,21 +383,21 @@
   <div id="inv-tab-transactions" class="inv-tab-pane {% if active_tab == 'transactions' %}active{% endif %}">
     <div class="table-card">
       <div class="table-card-header">
-        <h3 class="table-card-title">Investment &amp; Goal Transaction Log</h3>
-        <span class="table-card-badge">{{ txns_history|length }} Total Events</span>
+        <h3 class="table-card-title">Investment &amp; Goal Activity History</h3>
+        <span class="table-card-badge">{{ txns_history|length }} Total Entries</span>
       </div>
       <div class="table-responsive">
         <table class="data-table">
           <thead>
             <tr>
               <th>Date</th>
-              <th>Event Type</th>
-              <th>Instrument / Target</th>
+              <th>Activity</th>
+              <th>Investment / Goal</th>
               <th>Category</th>
-              <th class="text-right">Units / Allocation</th>
-              <th class="text-right">Price</th>
-              <th class="text-right">Total Outlay</th>
-              <th>Notes</th>
+              <th class="text-right">Units</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">Total Amount</th>
+              <th>Note</th>
             </tr>
           </thead>
           <tbody>
@@ -386,7 +418,7 @@
               </tr>
             {% else %}
               <tr>
-                <td colspan="8" class="empty-table-state">No historical portfolio transactions logged.</td>
+                <td colspan="8" class="empty-table-state">No investment or goal activity recorded yet.</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -399,20 +431,20 @@
     <div class="table-card">
       <div class="table-card-header">
         <div>
-          <h3 class="table-card-title">Portfolio Allocation vs Recommended Target</h3>
-          <p class="chart-subtitle">Rebalancing telemetry based on risk-adjusted institutional asset allocations</p>
+          <h3 class="table-card-title">Your Mix vs. Balanced Target</h3>
+          <p class="chart-subtitle">How your investments compare to a balanced mix</p>
         </div>
       </div>
       <div class="table-responsive">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Asset Class</th>
+              <th>Investment Type</th>
               <th class="text-right">Current Value</th>
-              <th class="text-right">Current Share (%)</th>
-              <th class="text-right">Target Model (%)</th>
-              <th class="text-right">Variance</th>
-              <th>Rebalancing Action</th>
+              <th class="text-right">Your Share (%)</th>
+              <th class="text-right">Suggested Mix (%)</th>
+              <th class="text-right">Difference</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -426,14 +458,14 @@
                   {% if item.diff > 0 %}+{% endif %}{{ item.diff }}%
                 </td>
                 <td>
-                  <span class="status-pill {% if item.hint == 'Overweight' %}pill-warning{% elif item.hint == 'Underweight' %}pill-danger{% else %}pill-completed{% endif %}">
-                    {{ item.hint }}
+                  <span class="status-pill {% if item.hint == 'Overweight' %}pill-at-risk{% elif item.hint == 'Underweight' %}pill-on-track{% else %}pill-completed{% endif %}">
+                    {% if item.hint == 'Overweight' %}Higher than target{% elif item.hint == 'Underweight' %}Lower than target{% else %}Well Balanced{% endif %}
                   </span>
                 </td>
               </tr>
             {% else %}
               <tr>
-                <td colspan="6" class="empty-table-state">No allocation data available.</td>
+                <td colspan="6" class="empty-table-state">Add investments to see how balanced your portfolio is.</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -446,37 +478,40 @@
     <div class="kpi-grid">
       <div class="kpi-card">
         <div class="kpi-header">
-          <span class="kpi-title">Portfolio Alpha</span>
+          <span class="kpi-title">
+            Portfolio Alpha
+            <button type="button" class="help-tip" data-tip="How much better or worse your investments performed compared to the market average (NIFTY 50)." aria-label="What is Portfolio Alpha">?</button>
+          </span>
           <div class="kpi-icon-wrap icon-blue">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
           </div>
         </div>
         <div class="kpi-value font-mono {% if portfolio_alpha >= 0 %}text-green{% else %}text-red{% endif %}">
           {% if portfolio_alpha >= 0 %}+{% endif %}{{ portfolio_alpha }}%
         </div>
         <div class="kpi-footer">
-          <span class="kpi-meta">Excess return over NIFTY 50 Benchmark</span>
+          <span class="kpi-meta">Difference vs. NIFTY 50 market average</span>
         </div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-header">
-          <span class="kpi-title">Calculated Risk Profile</span>
+          <span class="kpi-title">Your Risk Level</span>
           <div class="kpi-icon-wrap icon-purple">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </div>
         </div>
         <div class="kpi-value">{{ risk_profile }}</div>
         <div class="kpi-footer">
-          <span class="kpi-meta">Derived from equity and growth fund exposure</span>
+          <span class="kpi-meta">Based on your share of stocks and funds</span>
         </div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-header">
-          <span class="kpi-title">Top Gainer Asset</span>
+          <span class="kpi-title">Best Performer</span>
           <div class="kpi-icon-wrap icon-green">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
           </div>
         </div>
         <div class="kpi-value font-mono text-green">
@@ -489,9 +524,9 @@
 
       <div class="kpi-card">
         <div class="kpi-header">
-          <span class="kpi-title">Top Laggard Asset</span>
+          <span class="kpi-title">Slowest Performer</span>
           <div class="kpi-icon-wrap icon-red">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
           </div>
         </div>
         <div class="kpi-value font-mono {% if top_laggard and top_laggard.return_pct < 0 %}text-red{% else %}text-muted{% endif %}">
@@ -506,8 +541,8 @@
     <div class="chart-card">
       <div class="chart-header">
         <div>
-          <h3 class="chart-title">Holdings Performance Matrix</h3>
-          <p class="chart-subtitle">Individual return % comparison across all portfolio instruments</p>
+          <h3 class="chart-title">Return by Investment</h3>
+          <p class="chart-subtitle">Percentage profit or loss for each investment you hold</p>
         </div>
       </div>
       <div class="line-chart-container" style="height: 320px;">
@@ -520,28 +555,31 @@
 <div id="modal-add-investment" class="modal-backdrop">
   <div class="modal-dialog">
     <div class="modal-header">
-      <h3 class="modal-title">Add Investment Holding</h3>
-      <button type="button" class="modal-close-btn" onclick="closeModal('modal-add-investment')">&times;</button>
+      <div>
+        <h3 class="modal-title">Add an Investment</h3>
+        <p class="modal-subtitle">Enter what you bought so FinSight can track its profit and loss.</p>
+      </div>
+      <button type="button" class="modal-close-btn" onclick="closeModal('modal-add-investment')" aria-label="Close modal">&times;</button>
     </div>
-    <form method="POST" action="{{ url_for('add_investment') }}" class="modal-form">
+    <form id="addInvForm" method="POST" action="{{ url_for('add_investment') }}" class="modal-form" data-today="{{ today_date }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="modal-body">
         <div class="form-row">
           <div class="form-group flex-2">
-            <label for="add-inv-name" class="form-label">Instrument Name *</label>
-            <input type="text" id="add-inv-name" name="asset_name" class="form-control" placeholder="e.g. HDFC Bank, Vanguard S&P 500" required>
+            <label for="add-inv-name" class="form-label">Investment Name *</label>
+            <input type="text" id="add-inv-name" name="asset_name" class="form-control" placeholder="e.g. HDFC Bank, S&amp;P 500 Index Fund" required>
           </div>
           <div class="form-group flex-1">
-            <label for="add-inv-ticker" class="form-label">Ticker Symbol</label>
+            <label for="add-inv-ticker" class="form-label">Symbol <span class="field-optional">(Optional)</span></label>
             <input type="text" id="add-inv-ticker" name="ticker" class="form-control" placeholder="e.g. HDFCBANK, VOO">
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label for="add-inv-type" class="form-label">Asset Class *</label>
+            <label for="add-inv-type" class="form-label">Investment Type *</label>
             <select id="add-inv-type" name="asset_type" class="form-control" required>
-              <option value="Equity">Equity</option>
+              <option value="Equity">Equity (Stocks)</option>
               <option value="Mutual Fund">Mutual Fund</option>
               <option value="ETF">ETF</option>
               <option value="Debt">Debt</option>
@@ -553,40 +591,40 @@
           </div>
           <div class="form-group flex-1">
             <label for="add-inv-qty" class="form-label">Quantity / Units *</label>
-            <input type="number" id="add-inv-qty" step="any" min="0.0001" name="quantity" class="form-control" placeholder="1.0" required>
+            <input type="number" id="add-inv-qty" step="any" min="0.0001" name="quantity" class="form-control font-mono" placeholder="1.0" required>
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label for="add-inv-buy" class="form-label">Avg Purchase Price ({{ currency_symbol }}) *</label>
-            <input type="number" id="add-inv-buy" step="any" min="0.01" name="purchase_price" class="form-control" placeholder="0.00" required>
+            <label for="add-inv-buy" class="form-label">Buy Price per Unit ({{ currency_symbol }}) *</label>
+            <input type="number" id="add-inv-buy" step="any" min="0.01" name="purchase_price" class="form-control font-mono" placeholder="0.00" required>
           </div>
           <div class="form-group flex-1">
-            <label for="add-inv-curr" class="form-label">Current Market Price ({{ currency_symbol }})</label>
-            <input type="number" id="add-inv-curr" step="any" min="0.01" name="current_price" class="form-control" placeholder="0.00">
+            <label for="add-inv-curr" class="form-label">Current Price per Unit ({{ currency_symbol }})</label>
+            <input type="number" id="add-inv-curr" step="any" min="0.01" name="current_price" class="form-control font-mono" placeholder="Same as buy price if blank">
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label for="add-inv-date" class="form-label">Purchase Date *</label>
+            <label for="add-inv-date" class="form-label">Date Bought *</label>
             <input type="date" id="add-inv-date" name="purchase_date" class="form-control" value="{{ today_date }}" required>
           </div>
           <div class="form-group flex-1">
-            <label for="add-inv-day" class="form-label">Today's Day Change (%)</label>
-            <input type="number" id="add-inv-day" step="any" name="day_change_pct" class="form-control" placeholder="0.0">
+            <label for="add-inv-day" class="form-label">Today's Change (%)</label>
+            <input type="number" id="add-inv-day" step="any" name="day_change_pct" class="form-control font-mono" placeholder="0.0">
           </div>
         </div>
 
         <div class="form-group">
-          <label for="add-inv-notes" class="form-label">Notes &amp; Strategy Description</label>
-          <input type="text" id="add-inv-notes" name="notes" class="form-control" placeholder="Optional notes, sector or broker reference">
+          <label for="add-inv-notes" class="form-label">Note <span class="field-optional">(Optional)</span></label>
+          <input type="text" id="add-inv-notes" name="notes" class="form-control" placeholder="e.g. Long-term savings, broker app name">
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-secondary" onclick="closeModal('modal-add-investment')">Cancel</button>
-        <button type="submit" class="btn-primary">Add Holding</button>
+        <button type="submit" class="btn-primary">Add Investment</button>
       </div>
     </form>
   </div>
@@ -595,8 +633,11 @@
 <div id="modal-edit-investment" class="modal-backdrop">
   <div class="modal-dialog">
     <div class="modal-header">
-      <h3 class="modal-title" id="editInvTitle">Update Market Parameters</h3>
-      <button type="button" class="modal-close-btn" onclick="closeModal('modal-edit-investment')">&times;</button>
+      <div>
+        <h3 class="modal-title" id="editInvTitle">Edit Investment</h3>
+        <p class="modal-subtitle">Update your units, buy price, or latest market price.</p>
+      </div>
+      <button type="button" class="modal-close-btn" onclick="closeModal('modal-edit-investment')" aria-label="Close modal">&times;</button>
     </div>
     <form id="editInvForm" method="POST" action="" class="modal-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -604,27 +645,27 @@
         <div class="form-row">
           <div class="form-group flex-1">
             <label for="editInvQty" class="form-label">Quantity / Units *</label>
-            <input type="number" step="any" min="0.0001" name="quantity" id="editInvQty" class="form-control" required>
+            <input type="number" step="any" min="0.0001" name="quantity" id="editInvQty" class="form-control font-mono" required>
           </div>
           <div class="form-group flex-1">
-            <label for="editInvBuy" class="form-label">Avg Purchase Price ({{ currency_symbol }}) *</label>
-            <input type="number" step="any" min="0.01" name="purchase_price" id="editInvBuy" class="form-control" required>
+            <label for="editInvBuy" class="form-label">Buy Price ({{ currency_symbol }}) *</label>
+            <input type="number" step="any" min="0.01" name="purchase_price" id="editInvBuy" class="form-control font-mono" required>
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label for="editInvCurr" class="form-label">Current Market Price ({{ currency_symbol }}) *</label>
-            <input type="number" step="any" min="0.01" name="current_price" id="editInvCurr" class="form-control" required>
+            <label for="editInvCurr" class="form-label">Current Price ({{ currency_symbol }}) *</label>
+            <input type="number" step="any" min="0.01" name="current_price" id="editInvCurr" class="form-control font-mono" required>
           </div>
           <div class="form-group flex-1">
-            <label for="editInvDay" class="form-label">Today's Day Change (%)</label>
-            <input type="number" step="any" name="day_change_pct" id="editInvDay" class="form-control">
+            <label for="editInvDay" class="form-label">Today's Change (%)</label>
+            <input type="number" step="any" name="day_change_pct" id="editInvDay" class="form-control font-mono">
           </div>
         </div>
 
         <div class="form-group">
-          <label for="editInvNotes" class="form-label">Notes</label>
+          <label for="editInvNotes" class="form-label">Note</label>
           <input type="text" name="notes" id="editInvNotes" class="form-control">
         </div>
       </div>
@@ -637,6 +678,16 @@
 </div>
 
 <script>
+  function openAddInvestmentModal() {
+    var form = document.getElementById('addInvForm');
+    if (form) {
+      form.reset();
+      var dateInput = document.getElementById('add-inv-date');
+      if (dateInput && form.dataset.today) dateInput.value = form.dataset.today;
+    }
+    openModal('modal-add-investment');
+  }
+
   function switchInvTab(tabName) {
     document.querySelectorAll('.inv-tab-pane').forEach(function(pane) {
       pane.classList.remove('active');
@@ -648,10 +699,13 @@
     if (activePane) {
       activePane.classList.add('active');
     }
-    event.currentTarget.classList.add('active');
+    var matchingTab = document.querySelector('.subnav-tab[data-tab="' + tabName + '"]');
+    if (matchingTab) {
+      matchingTab.classList.add('active');
+    }
     if (history.pushState) {
       var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?tab=' + tabName;
-      window.history.pushState({path:newurl},'',newurl);
+      window.history.pushState({path: newurl}, '', newurl);
     }
   }
 
@@ -671,7 +725,7 @@
 
   function openEditInvestmentModal(btn) {
     var d = btn.dataset;
-    document.getElementById('editInvTitle').textContent = 'Update ' + (d.name || '');
+    document.getElementById('editInvTitle').textContent = 'Edit ' + (d.name || '');
     document.getElementById('editInvQty').value = d.qty || '';
     document.getElementById('editInvBuy').value = d.buy || '';
     document.getElementById('editInvCurr').value = d.curr || '';
@@ -759,7 +813,7 @@
           labels: perfLabels,
           datasets: [
             {
-              label: 'Portfolio Return (%)',
+              label: 'Your Portfolio (%)',
               data: perfPortfolio,
               borderColor: '#10b981',
               backgroundColor: 'rgba(16, 185, 129, 0.08)',
@@ -770,7 +824,7 @@
               pointHoverRadius: 6
             },
             {
-              label: 'NIFTY 50 Benchmark (%)',
+              label: 'NIFTY 50 Average (%)',
               data: perfBenchmark,
               borderColor: '#2563eb',
               backgroundColor: 'transparent',

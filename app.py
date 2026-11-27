@@ -2,17 +2,20 @@ import os
 import re
 import csv
 import io
+import math
 import secrets
 from datetime import datetime
+from urllib.parse import urlparse
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
 from flask import Flask, render_template, redirect, url_for, request, flash, session, Response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import func
 from models import db, User, Transaction, BudgetCategory, Account, Investment, PortfolioHistory, Goal, GoalTransaction
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'finsight-secure-production-key-2024')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///users.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -35,6 +38,21 @@ CHART_PALETTE = [
     '#1a56db', '#f97316', '#10b981', '#6366f1', '#ec4899',
     '#8b5cf6', '#14b8a6', '#f59e0b', '#06b6d4', '#64748b'
 ]
+DEFAULT_EXPENSE_CATEGORIES = [
+    'Food & Dining', 'Groceries', 'Housing & Rent', 'Transportation',
+    'Utilities', 'Shopping', 'Entertainment', 'Healthcare',
+    'Savings & Goals', 'Other'
+]
+DEFAULT_INCOME_CATEGORIES = [
+    'Salary', 'Freelance / Consulting', 'Business Sales',
+    'Investments / Dividends', 'Gift / Bonus', 'Other'
+]
+VALID_ACCOUNT_TYPES = ('Bank', PAY_CREDIT_CARD, 'Wallet', 'Cash')
+VALID_BUDGET_PERIODS = ('Monthly', 'Yearly')
+VALID_TXN_TYPES = ('income', 'expense')
+VALID_ASSET_TYPES = ('Equity', ASSET_MUTUAL_FUND, 'ETF', 'Debt', 'Bond', 'Gold', 'Cash', 'Other')
+VALID_GOAL_TYPES = ('Home', 'Retirement', 'Travel', 'Education', 'Emergency', 'Major Purchase', 'Other')
+PUBLIC_SIGNUP_ROLES = ('user', 'shop_owner')
 
 CURRENCIES = {
     'USD': {'code': 'USD', 'symbol': '$', 'name': 'US Dollar'},
@@ -95,6 +113,62 @@ def format_money(amount):
     return f"-{symbol}{val_str}" if is_neg else f"{symbol}{val_str}"
 
 
+def parse_finite_float(val_str, default=None):
+    if val_str is None:
+        return default
+    text = str(val_str).strip()
+    if not text:
+        return default
+    try:
+        val = float(text)
+    except ValueError:
+        return None
+    if not math.isfinite(val):
+        return None
+    return val
+
+
+def validate_iso_date(date_str):
+    if not date_str or not re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+        return False
+    try:
+        datetime.strptime(date_str, '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
+
+
+def is_safe_redirect_url(target):
+    if not target or not isinstance(target, str):
+        return False
+    if target.startswith('//') or '\\' in target:
+        return False
+    parsed = urlparse(target)
+    return parsed.netloc == '' and parsed.scheme == '' and target.startswith('/')
+
+
+def sanitize_csv_cell(value):
+    if value is None:
+        return ''
+    text = str(value)
+    if text and text[0] in ('=', '+', '-', '@', '\t', '\r'):
+        return "'" + text
+    return text
+
+
+def check_sufficient_balance(account, amount):
+    if account is None or account.account_type == PAY_CREDIT_CARD:
+        return True, None
+    if round(account.balance - amount, 2) < 0.0:
+        msg = (
+            f'Insufficient balance in {account.name} '
+            f'(Available: {format_money(account.balance)}, Needed: {format_money(amount)}). '
+            f'Choose another account or add funds first.'
+        )
+        return False, msg
+    return True, None
+
+
 @app.before_request
 def csrf_protect():
     if 'csrf_token' not in session:
@@ -129,20 +203,20 @@ def _collect_investment_alerts(user):
     for inv in user.investments:
         if inv.return_pct >= 25.0:
             alerts.append({
-                'title': f'{inv.asset_name} Outperforming',
-                'desc': f'Unrealized gain of +{inv.return_pct}% on holding.',
+                'title': f'{inv.asset_name} Growing Strong',
+                'desc': f'Up +{inv.return_pct}% since you bought it.',
                 'is_gain': True
             })
         elif inv.return_pct <= -10.0:
             alerts.append({
-                'title': f'{inv.asset_name} Drawdown Alert',
-                'desc': f'Holding is down {inv.return_pct}% against purchase price.',
+                'title': f'{inv.asset_name} Price Drop',
+                'desc': f'Down {inv.return_pct}% from your buy price.',
                 'is_gain': False
             })
         elif abs(inv.day_change_pct) >= 3.0:
             alerts.append({
-                'title': f'{inv.asset_name} Volatility',
-                'desc': f'Intraday movement of {inv.day_change_pct:+.1f}% recorded today.',
+                'title': f'{inv.asset_name} Big Move Today',
+                'desc': f'Changed {inv.day_change_pct:+.1f}% since yesterday.',
                 'is_gain': inv.day_change_pct > 0
             })
     return alerts
@@ -153,20 +227,20 @@ def _collect_goal_alerts(user):
     for g in user.goals:
         if g.computed_status == 'At Risk':
             alerts.append({
-                'title': f'Goal at Risk: {g.goal_name}',
-                'desc': f'Behind schedule. Target date {g.target_date}. Recommended: {format_money(g.recommended_monthly_saving)}/mo.',
+                'title': f'Goal Needs Attention: {g.goal_name}',
+                'desc': f'Behind target date ({g.target_date}). Try saving {format_money(g.recommended_monthly_saving)}/mo.',
                 'is_risk': True
             })
         elif g.progress_pct >= 100.0:
             alerts.append({
-                'title': f'Target Achieved: {g.goal_name}',
-                'desc': f'Target corpus of {format_money(g.target_amount)} fully funded!',
+                'title': f'Goal Reached: {g.goal_name}',
+                'desc': f'You saved your full target of {format_money(g.target_amount)}!',
                 'is_risk': False
             })
         elif 75.0 <= g.progress_pct < 80.0:
             alerts.append({
-                'title': f'Milestone Hit: {g.goal_name}',
-                'desc': f'{g.progress_pct}% of goal corpus accumulated.',
+                'title': f'Almost There: {g.goal_name}',
+                'desc': f'{g.progress_pct}% of your savings target reached.',
                 'is_risk': False
             })
     return alerts
@@ -187,6 +261,23 @@ def _compute_sidebar_summary(user):
         'allocated': tot_alloc,
         'spent': tot_sp
     }
+
+
+def _build_expense_category_options(user):
+    options = []
+    seen = set()
+    if user and user.is_authenticated:
+        for b in user.budgets:
+            low = b.name.strip().lower()
+            if low and low not in seen:
+                seen.add(low)
+                options.append(b.name.strip())
+    for name in DEFAULT_EXPENSE_CATEGORIES:
+        low = name.lower()
+        if low not in seen:
+            seen.add(low)
+            options.append(name)
+    return options
 
 
 @app.context_processor
@@ -229,6 +320,9 @@ def inject_global_context():
         'goal_alerts': goal_alerts,
         'total_notif_count': total_notif_count,
         'sidebar_summary': sidebar_summary,
+        'expense_category_options': _build_expense_category_options(current_user),
+        'income_category_options': DEFAULT_INCOME_CATEGORIES,
+        'today_iso': datetime.now().strftime('%Y-%m-%d'),
         'csrf_token': session['csrf_token']
     }
 
@@ -681,34 +775,143 @@ def index():
     return redirect(url_for('dashboard'))
 
 
+def _get_prev_month_key():
+    now = datetime.now()
+    year = now.year
+    month = now.month - 1
+    if month <= 0:
+        month = 12
+        year -= 1
+    return f"{year:04d}-{month:02d}"
+
+
+def _format_month_label(ym_key):
+    try:
+        return datetime.strptime(ym_key, '%Y-%m').strftime('%b %Y')
+    except ValueError:
+        return ym_key
+
+
+def _resolve_month_prefix(month_filter):
+    if month_filter == 'this_month':
+        return datetime.now().strftime('%Y-%m')
+    if month_filter == 'last_month':
+        return _get_prev_month_key()
+    if re.match(r'^\d{4}-\d{2}$', month_filter):
+        return month_filter
+    return ''
+
+
+def _build_month_options(all_txns):
+    this_key = datetime.now().strftime('%Y-%m')
+    last_key = _get_prev_month_key()
+    options = [
+        {'value': 'this_month', 'label': f'This Month ({_format_month_label(this_key)})'},
+        {'value': 'last_month', 'label': f'Last Month ({_format_month_label(last_key)})'}
+    ]
+    raw_months = sorted({t.date[:7] for t in all_txns if t.date and len(t.date) >= 7}, reverse=True)
+    for ym in raw_months:
+        if ym not in (this_key, last_key):
+            options.append({'value': ym, 'label': _format_month_label(ym)})
+    return options
+
+
+def _build_filtered_ledger(user_id, txn_type):
+    query = Transaction.query.filter_by(user_id=user_id, txn_type=txn_type)
+    search = request.args.get('q', '').strip()
+    cat_filter = request.args.get('category', '').strip()
+    mode_filter = request.args.get('mode', '').strip()
+    month_filter = request.args.get('month', '').strip()
+
+    if search:
+        query = query.filter((Transaction.title.ilike(f'%{search}%')) | (Transaction.notes.ilike(f'%{search}%')))
+    if cat_filter:
+        query = query.filter_by(category=cat_filter)
+    if mode_filter:
+        query = query.filter_by(payment_mode=mode_filter)
+
+    month_prefix = _resolve_month_prefix(month_filter)
+    if month_prefix:
+        query = query.filter(Transaction.date.like(f'{month_prefix}%'))
+
+    transactions = query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+    all_txns = Transaction.query.filter_by(user_id=user_id, txn_type=txn_type).all()
+
+    total_amount = round(sum(t.amount for t in transactions), 2)
+    avg_amount = round((total_amount / len(transactions)), 2) if transactions else 0.0
+
+    top_group = 'None'
+    if transactions:
+        group_totals = {}
+        for t in transactions:
+            group_totals[t.category] = group_totals.get(t.category, 0.0) + t.amount
+        top_group = max(group_totals, key=lambda k: group_totals[k])
+
+    return {
+        'transactions': transactions,
+        'total_amount': total_amount,
+        'avg_amount': avg_amount,
+        'top_group': top_group,
+        'categories': sorted({t.category for t in all_txns}),
+        'payment_modes': sorted({t.payment_mode for t in all_txns if t.payment_mode}),
+        'month_options': _build_month_options(all_txns),
+        'search': search,
+        'selected_category': cat_filter,
+        'selected_mode': mode_filter,
+        'selected_month': month_filter,
+        'is_filtered': bool(search or cat_filter or mode_filter or month_prefix),
+        'accounts': Account.query.filter_by(user_id=user_id).all()
+    }
+
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
     if not current_user.budgets and not current_user.transactions:
         seed_user_financial_profile(current_user)
 
-    transactions = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+    period = request.args.get('period', 'all').strip().lower()
+    if period not in ('all', 'month'):
+        period = 'all'
+
+    all_transactions = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+    if period == 'month':
+        month_prefix = datetime.now().strftime('%Y-%m')
+        scoped_txns = [t for t in all_transactions if t.date and t.date.startswith(month_prefix)]
+        period_label = f"This Month ({_format_month_label(month_prefix)})"
+    else:
+        scoped_txns = all_transactions
+        period_label = 'All Time'
+
     budgets = BudgetCategory.query.filter_by(user_id=current_user.id).all()
     accounts = Account.query.filter_by(user_id=current_user.id).all()
 
-    total_income = sum(t.amount for t in transactions if t.txn_type == 'income')
-    total_expense = sum(t.amount for t in transactions if t.txn_type == 'expense')
-    net_profit = total_income - total_expense
+    income_txns = [t for t in scoped_txns if t.txn_type == 'income']
+    expense_txns = [t for t in scoped_txns if t.txn_type == 'expense']
+    total_income = round(sum(t.amount for t in income_txns), 2)
+    total_expense = round(sum(t.amount for t in expense_txns), 2)
+    net_profit = round(total_income - total_expense, 2)
     operating_margin = round((net_profit / total_income * 100), 1) if total_income > 0 else 0.0
+    spend_pct = round((total_expense / total_income * 100), 1) if total_income > 0 else 0.0
 
     total_allocated = sum(b.allocated for b in budgets if b.period == 'Monthly')
     total_budget_spent = sum(b.spent for b in budgets if b.period == 'Monthly')
     budget_utilization = round((total_budget_spent / total_allocated * 100), 1) if total_allocated > 0 else 0.0
     budget_variance = round(total_allocated - total_budget_spent, 2)
 
-    donut_labels, donut_data, donut_colors, donut_items = _build_expense_donut(transactions)
-    trend_labels, trend_income, trend_expense = _build_monthly_trends(transactions)
+    donut_labels, donut_data, donut_colors, donut_items = _build_expense_donut(scoped_txns)
+    trend_labels, trend_income, trend_expense = _build_monthly_trends(all_transactions)
 
     return render_template(
         'dashboard.html',
         active_page='dashboard',
         page_title='Dashboard',
-        transactions=transactions[:8],
+        period=period,
+        period_label=period_label,
+        transactions=scoped_txns[:8],
+        income_count=len(income_txns),
+        expense_count=len(expense_txns),
+        spend_pct=spend_pct,
         budgets=budgets,
         accounts=accounts,
         total_income=total_income,
@@ -732,102 +935,48 @@ def dashboard():
 @app.route('/expenses')
 @login_required
 def expenses():
-    query = Transaction.query.filter_by(user_id=current_user.id, txn_type='expense')
-
-    search = request.args.get('q', '').strip().lower()
-    cat_filter = request.args.get('category', '').strip()
-    mode_filter = request.args.get('mode', '').strip()
-
-    if search:
-        query = query.filter((Transaction.title.ilike(f'%{search}%')) | (Transaction.notes.ilike(f'%{search}%')))
-    if cat_filter:
-        query = query.filter_by(category=cat_filter)
-    if mode_filter:
-        query = query.filter_by(payment_mode=mode_filter)
-
-    transactions = query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
-    all_expenses = Transaction.query.filter_by(user_id=current_user.id, txn_type='expense').all()
-
-    total_expense = sum(t.amount for t in all_expenses)
-    avg_expense = (total_expense / len(all_expenses)) if all_expenses else 0.0
-
-    categories = sorted({t.category for t in all_expenses})
-    payment_modes = sorted({t.payment_mode for t in all_expenses if t.payment_mode})
-
-    top_cat = 'None'
-    if all_expenses:
-        cat_counts = {}
-        for t in all_expenses:
-            cat_counts[t.category] = cat_counts.get(t.category, 0.0) + t.amount
-        top_cat = max(cat_counts, key=lambda k: cat_counts[k])
-
-    accounts = Account.query.filter_by(user_id=current_user.id).all()
-
+    data = _build_filtered_ledger(current_user.id, 'expense')
     return render_template(
         'expenses.html',
         active_page='expenses',
         page_title='Expenses',
-        transactions=transactions,
-        total_expense=total_expense,
-        avg_expense=avg_expense,
-        top_cat=top_cat,
-        categories=categories,
-        payment_modes=payment_modes,
-        search=search,
-        selected_category=cat_filter,
-        selected_mode=mode_filter,
-        accounts=accounts
+        transactions=data['transactions'],
+        total_expense=data['total_amount'],
+        avg_expense=data['avg_amount'],
+        top_cat=data['top_group'],
+        categories=data['categories'],
+        payment_modes=data['payment_modes'],
+        month_options=data['month_options'],
+        search=data['search'],
+        selected_category=data['selected_category'],
+        selected_mode=data['selected_mode'],
+        selected_month=data['selected_month'],
+        is_filtered=data['is_filtered'],
+        accounts=data['accounts']
     )
 
 
 @app.route('/income')
 @login_required
 def income():
-    query = Transaction.query.filter_by(user_id=current_user.id, txn_type='income')
-
-    search = request.args.get('q', '').strip().lower()
-    cat_filter = request.args.get('category', '').strip()
-    mode_filter = request.args.get('mode', '').strip()
-
-    if search:
-        query = query.filter((Transaction.title.ilike(f'%{search}%')) | (Transaction.notes.ilike(f'%{search}%')))
-    if cat_filter:
-        query = query.filter_by(category=cat_filter)
-    if mode_filter:
-        query = query.filter_by(payment_mode=mode_filter)
-
-    transactions = query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
-    all_incomes = Transaction.query.filter_by(user_id=current_user.id, txn_type='income').all()
-
-    total_income = sum(t.amount for t in all_incomes)
-    avg_income = (total_income / len(all_incomes)) if all_incomes else 0.0
-
-    categories = sorted({t.category for t in all_incomes})
-    payment_modes = sorted({t.payment_mode for t in all_incomes if t.payment_mode})
-
-    top_source = 'None'
-    if all_incomes:
-        cat_counts = {}
-        for t in all_incomes:
-            cat_counts[t.category] = cat_counts.get(t.category, 0.0) + t.amount
-        top_source = max(cat_counts, key=lambda k: cat_counts[k])
-
-    accounts = Account.query.filter_by(user_id=current_user.id).all()
-
+    data = _build_filtered_ledger(current_user.id, 'income')
     return render_template(
         'income.html',
         active_page='income',
         page_title='Income',
-        transactions=transactions,
-        total_income=total_income,
-        avg_income=avg_income,
-        top_source=top_source,
-        categories=categories,
-        payment_modes=payment_modes,
-        search=search,
-        selected_category=cat_filter,
-        selected_mode=mode_filter,
-        accounts=accounts
+        transactions=data['transactions'],
+        total_income=data['total_amount'],
+        avg_income=data['avg_amount'],
+        top_source=data['top_group'],
+        categories=data['categories'],
+        payment_modes=data['payment_modes'],
+        month_options=data['month_options'],
+        search=data['search'],
+        selected_category=data['selected_category'],
+        selected_mode=data['selected_mode'],
+        selected_month=data['selected_month'],
+        is_filtered=data['is_filtered'],
+        accounts=data['accounts']
     )
 
 
@@ -862,48 +1011,70 @@ def budgets():
     )
 
 
-@app.route('/add-budget', methods=['POST'])
-@login_required
-def add_budget():
+def _parse_budget_inputs(default_spent=0.0):
     name = request.form.get('name', '').strip()
-    allocated_str = request.form.get('allocated', '0').strip()
-    spent_str = request.form.get('spent', '0').strip()
+    allocated = parse_finite_float(request.form.get('allocated', ''))
+    spent_raw = request.form.get('spent', '').strip()
+    spent = parse_finite_float(spent_raw, default=default_spent) if spent_raw != '' else default_spent
     period = request.form.get('period', 'Monthly').strip()
     threshold_str = request.form.get('alert_threshold', '80').strip()
 
     try:
-        allocated = float(allocated_str)
-        spent = float(spent_str) if spent_str else 0.0
         threshold = int(threshold_str) if threshold_str else 80
-        if allocated <= 0:
-            flash('Budget allocation must be positive.', 'danger')
-            return redirect(url_for('budgets'))
     except ValueError:
-        flash('Invalid numeric budget amount.', 'danger')
-        return redirect(url_for('budgets'))
+        return None, 'Alert threshold must be a whole number between 1 and 100.'
 
     if not name:
-        flash('Budget category name is required.', 'danger')
+        return None, 'Budget category name is required.'
+    if allocated is None or allocated <= 0:
+        return None, 'Budget limit must be a valid positive number.'
+    if spent is None or spent < 0:
+        return None, 'Spent amount must be zero or a positive number.'
+    if period not in VALID_BUDGET_PERIODS:
+        return None, 'Budget period must be Monthly or Yearly.'
+    if not (1 <= threshold <= 100):
+        return None, 'Alert threshold must be between 1% and 100%.'
+
+    return {
+        'name': name,
+        'allocated': round(allocated, 2),
+        'spent': round(spent, 2),
+        'spent_provided': spent_raw != '',
+        'period': period,
+        'threshold': threshold
+    }, None
+
+
+@app.route('/add-budget', methods=['POST'])
+@login_required
+def add_budget():
+    parsed, err = _parse_budget_inputs(default_spent=0.0)
+    if err or not parsed:
+        flash(err or 'Unable to save budget.', 'danger')
         return redirect(url_for('budgets'))
 
-    existing = BudgetCategory.query.filter_by(user_id=current_user.id, name=name, period=period).first()
+    existing = BudgetCategory.query.filter(
+        BudgetCategory.user_id == current_user.id,
+        func.lower(BudgetCategory.name) == parsed['name'].lower(),
+        BudgetCategory.period == parsed['period']
+    ).first()
     if existing:
-        existing.allocated = allocated
-        if spent > 0:
-            existing.spent = spent
-        existing.alert_threshold = threshold
-        flash(f'Budget for "{name}" ({period}) updated successfully.', 'success')
+        existing.allocated = parsed['allocated']
+        if parsed['spent_provided']:
+            existing.spent = parsed['spent']
+        existing.alert_threshold = parsed['threshold']
+        flash(f'Budget for "{parsed["name"]}" ({parsed["period"]}) updated successfully.', 'success')
     else:
         new_b = BudgetCategory(
             user_id=current_user.id,
-            name=name,
-            allocated=allocated,
-            spent=spent,
-            period=period,
-            alert_threshold=threshold
+            name=parsed['name'],
+            allocated=parsed['allocated'],
+            spent=parsed['spent'],
+            period=parsed['period'],
+            alert_threshold=parsed['threshold']
         )
         db.session.add(new_b)
-        flash(f'New {period} budget category "{name}" created.', 'success')
+        flash(f'New {parsed["period"]} budget "{parsed["name"]}" created.', 'success')
 
     db.session.commit()
     return redirect(url_for('budgets'))
@@ -917,29 +1088,16 @@ def edit_budget(budget_id):
         flash('Budget category not found.', 'danger')
         return redirect(url_for('budgets'))
 
-    name = request.form.get('name', '').strip()
-    allocated_str = request.form.get('allocated', '0').strip()
-    spent_str = request.form.get('spent', '0').strip()
-    period = request.form.get('period', 'Monthly').strip()
-    threshold_str = request.form.get('alert_threshold', '80').strip()
-
-    try:
-        allocated = float(allocated_str)
-        spent = float(spent_str) if spent_str else budget.spent
-        threshold = int(threshold_str) if threshold_str else 80
-        if allocated <= 0:
-            flash('Allocation cap must be positive.', 'danger')
-            return redirect(url_for('budgets'))
-    except ValueError:
-        flash('Please enter valid numerical figures.', 'danger')
+    parsed, err = _parse_budget_inputs(default_spent=budget.spent)
+    if err or not parsed:
+        flash(err or 'Unable to update budget.', 'danger')
         return redirect(url_for('budgets'))
 
-    if name:
-        budget.name = name
-    budget.allocated = allocated
-    budget.spent = spent
-    budget.period = period
-    budget.alert_threshold = threshold
+    budget.name = parsed['name']
+    budget.allocated = parsed['allocated']
+    budget.spent = parsed['spent']
+    budget.period = parsed['period']
+    budget.alert_threshold = parsed['threshold']
 
     db.session.commit()
     flash(f'Budget "{budget.name}" updated successfully.', 'success')
@@ -985,21 +1143,28 @@ def add_account():
     account_type = request.form.get('account_type', 'Bank').strip()
     balance_str = request.form.get('balance', '0').strip()
 
-    try:
-        balance = float(balance_str) if balance_str else 0.0
-    except ValueError:
-        flash('Invalid numeric initial balance.', 'danger')
-        return redirect(url_for('accounts'))
-
     if not name:
         flash('Account name is required.', 'danger')
+        return redirect(url_for('accounts'))
+
+    if account_type not in VALID_ACCOUNT_TYPES:
+        flash('Please choose a valid account type (Bank, Credit Card, Wallet, or Cash).', 'danger')
+        return redirect(url_for('accounts'))
+
+    balance = parse_finite_float(balance_str, default=0.0)
+    if balance is None:
+        flash('Please enter a valid number for the starting balance.', 'danger')
+        return redirect(url_for('accounts'))
+
+    if account_type != PAY_CREDIT_CARD and balance < 0:
+        flash('Only Credit Card accounts can start with a negative balance.', 'danger')
         return redirect(url_for('accounts'))
 
     new_acc = Account(
         user_id=current_user.id,
         name=name,
         account_type=account_type,
-        balance=balance
+        balance=round(balance, 2)
     )
     db.session.add(new_acc)
     db.session.commit()
@@ -1012,6 +1177,7 @@ def add_account():
 def delete_account(account_id):
     acc = Account.query.filter_by(id=account_id, user_id=current_user.id).first()
     if acc:
+        Transaction.query.filter_by(user_id=current_user.id, account_id=acc.id).update({'account_id': None})
         db.session.delete(acc)
         db.session.commit()
         flash(f'Account "{acc.name}" removed.', 'info')
@@ -1107,7 +1273,16 @@ def export_csv():
     writer.writerow(['Date', 'Title', 'Category', 'Type', 'Amount', 'Payment Mode', 'Status', 'Notes'])
 
     for t in transactions:
-        writer.writerow([t.date, t.title, t.category, t.txn_type.capitalize(), f"{t.amount:.2f}", t.payment_mode or '', t.status or 'Completed', t.notes or ''])
+        writer.writerow([
+            sanitize_csv_cell(t.date),
+            sanitize_csv_cell(t.title),
+            sanitize_csv_cell(t.category),
+            sanitize_csv_cell(t.txn_type.capitalize()),
+            f"{t.amount:.2f}",
+            sanitize_csv_cell(t.payment_mode or ''),
+            sanitize_csv_cell(t.status or 'Completed'),
+            sanitize_csv_cell(t.notes or '')
+        ])
 
     output.seek(0)
     filename = f"FinSight_Ledger_{current_user.fullname.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.csv"
@@ -1200,9 +1375,13 @@ def _build_investment_txns_history(inv_list, user_id):
 
 def _record_portfolio_snapshot(user_id, inv_id):
     all_inv = Investment.query.filter_by(user_id=user_id).all()
-    tot_val = sum(i.current_value for i in all_inv)
-    tot_inv = sum(i.invested_value for i in all_inv)
+    tot_val = round(sum(i.current_value for i in all_inv), 2)
+    tot_inv = round(sum(i.invested_value for i in all_inv), 2)
     ret_pct = round(((tot_val - tot_inv) / tot_inv) * 100, 2) if tot_inv > 0 else 0.0
+    latest_hist = PortfolioHistory.query.filter_by(user_id=user_id).order_by(
+        PortfolioHistory.date.desc(), PortfolioHistory.id.desc()
+    ).first()
+    bench_pct = latest_hist.benchmark_return_pct if latest_hist else 12.5
     ph = PortfolioHistory(
         user_id=user_id,
         investment_id=inv_id,
@@ -1210,7 +1389,7 @@ def _record_portfolio_snapshot(user_id, inv_id):
         invested_total=tot_inv,
         portfolio_value=tot_val,
         portfolio_return_pct=ret_pct,
-        benchmark_return_pct=12.5
+        benchmark_return_pct=bench_pct
     )
     db.session.add(ph)
     db.session.commit()
@@ -1289,51 +1468,70 @@ def investments():
     )
 
 
+def _validate_investment_numbers(qty_str, buy_str, curr_str, day_str, default_curr=None):
+    qty = parse_finite_float(qty_str)
+    buy_price = parse_finite_float(buy_str)
+    if curr_str.strip() == '' and default_curr is not None:
+        curr_price = default_curr if default_curr > 0 else buy_price
+    else:
+        curr_price = parse_finite_float(curr_str, default=buy_price)
+    day_pct = parse_finite_float(day_str, default=0.0)
+
+    if qty is None or buy_price is None or curr_price is None or day_pct is None:
+        return None, 'Please enter valid numbers for your investment.'
+    if qty <= 0 or buy_price <= 0 or curr_price <= 0:
+        return None, 'Quantity, buy price, and current price must be positive numbers.'
+    if not (-100.0 <= day_pct <= 1000.0):
+        return None, 'Daily change percentage must be between -100% and 1000%.'
+
+    return (qty, round(buy_price, 2), round(curr_price, 2), round(day_pct, 2)), None
+
+
 @app.route('/add-investment', methods=['POST'])
 @login_required
 def add_investment():
     asset_name = request.form.get('asset_name', '').strip()
     ticker = request.form.get('ticker', '').strip().upper()
     asset_type = request.form.get('asset_type', 'Equity').strip()
-    qty_str = request.form.get('quantity', '1').strip()
-    buy_str = request.form.get('purchase_price', '0').strip()
-    curr_str = request.form.get('current_price', '0').strip()
+    qty_str = request.form.get('quantity', '').strip()
+    buy_str = request.form.get('purchase_price', '').strip()
+    curr_str = request.form.get('current_price', '').strip()
     day_str = request.form.get('day_change_pct', '0').strip()
     p_date = request.form.get('purchase_date', datetime.now().strftime('%Y-%m-%d')).strip()
     notes = request.form.get('notes', '').strip()
 
-    try:
-        qty = float(qty_str)
-        buy_price = float(buy_str)
-        curr_price = float(curr_str) if curr_str else buy_price
-        day_pct = float(day_str) if day_str else 0.0
+    if not asset_name:
+        flash('Investment name is required.', 'danger')
+        return redirect(url_for('investments', tab='holdings'))
+    if asset_type not in VALID_ASSET_TYPES:
+        flash('Please select a valid investment type.', 'danger')
+        return redirect(url_for('investments', tab='holdings'))
+    if not validate_iso_date(p_date):
+        flash('Please enter a valid purchase date (YYYY-MM-DD).', 'danger')
+        return redirect(url_for('investments', tab='holdings'))
 
-        if not asset_name:
-            flash('Instrument name is required.', 'danger')
-            return redirect(url_for('investments', tab='holdings'))
-        if qty <= 0 or buy_price <= 0:
-            flash('Quantity and purchase price must be positive numbers.', 'danger')
-            return redirect(url_for('investments', tab='holdings'))
+    nums, err = _validate_investment_numbers(qty_str, buy_str, curr_str, day_str, default_curr=0.0)
+    if err or not nums:
+        flash(err or 'Invalid investment details.', 'danger')
+        return redirect(url_for('investments', tab='holdings'))
 
-        inv = Investment(
-            user_id=current_user.id,
-            asset_name=asset_name,
-            ticker=ticker if ticker else None,
-            asset_type=asset_type,
-            quantity=qty,
-            purchase_price=buy_price,
-            current_price=curr_price,
-            day_change_pct=day_pct,
-            purchase_date=p_date,
-            notes=notes if notes else None
-        )
-        db.session.add(inv)
-        db.session.commit()
-        _record_portfolio_snapshot(current_user.id, inv.id)
-        flash(f'Investment holding {asset_name} added to portfolio successfully!', 'success')
-    except ValueError:
-        flash('Please enter valid numeric figures for financial fields.', 'danger')
-
+    qty, buy_price, curr_price, day_pct = nums
+    inv = Investment(
+        user_id=current_user.id,
+        asset_name=asset_name,
+        ticker=ticker if ticker else None,
+        asset_type=asset_type,
+        quantity=qty,
+        purchase_price=buy_price,
+        current_price=curr_price,
+        day_change_pct=day_pct,
+        purchase_date=p_date,
+        notes=notes if notes else None
+    )
+    db.session.add(inv)
+    db.session.commit()
+    _record_portfolio_snapshot(current_user.id, inv.id)
+    flash(f'Investment "{asset_name}" added to your portfolio!', 'success')
     return redirect(url_for('investments', tab='holdings'))
 
 
@@ -1351,18 +1549,20 @@ def edit_investment(inv_id):
     day_str = request.form.get('day_change_pct', str(inv.day_change_pct or 0.0)).strip()
     notes = request.form.get('notes', inv.notes or '').strip()
 
-    try:
-        inv.quantity = float(qty_str)
-        inv.purchase_price = float(buy_str)
-        inv.current_price = float(curr_str)
-        inv.day_change_pct = float(day_str)
-        inv.notes = notes if notes else None
-        db.session.commit()
-        _record_portfolio_snapshot(current_user.id, inv.id)
-        flash(f'Holding {inv.asset_name} market parameters updated successfully!', 'success')
-    except ValueError:
-        flash('Please enter valid numeric figures for financial fields.', 'danger')
+    nums, err = _validate_investment_numbers(qty_str, buy_str, curr_str, day_str)
+    if err or not nums:
+        flash(err or 'Invalid investment details.', 'danger')
+        return redirect(url_for('investments', tab='holdings'))
 
+    qty, buy_price, curr_price, day_pct = nums
+    inv.quantity = qty
+    inv.purchase_price = buy_price
+    inv.current_price = curr_price
+    inv.day_change_pct = day_pct
+    inv.notes = notes if notes else None
+    db.session.commit()
+    _record_portfolio_snapshot(current_user.id, inv.id)
+    flash(f'Investment "{inv.asset_name}" updated successfully!', 'success')
     return redirect(url_for('investments', tab='holdings'))
 
 
@@ -1375,9 +1575,11 @@ def delete_investment(inv_id):
         return redirect(url_for('investments', tab='holdings'))
 
     name = inv.asset_name
+    PortfolioHistory.query.filter_by(user_id=current_user.id, investment_id=inv.id).update({'investment_id': None})
     db.session.delete(inv)
     db.session.commit()
-    flash(f'Holding {name} removed from your portfolio.', 'success')
+    _record_portfolio_snapshot(current_user.id, None)
+    flash(f'Investment "{name}" removed from your portfolio.', 'success')
     return redirect(url_for('investments', tab='holdings'))
 
 
@@ -1396,9 +1598,9 @@ def export_investments_csv():
 
     for h in holdings:
         writer.writerow([
-            h.asset_name,
-            h.ticker or '',
-            h.asset_type,
+            sanitize_csv_cell(h.asset_name),
+            sanitize_csv_cell(h.ticker or ''),
+            sanitize_csv_cell(h.asset_type),
             h.quantity,
             h.purchase_price,
             h.current_price,
@@ -1407,8 +1609,8 @@ def export_investments_csv():
             h.absolute_return,
             f"{h.return_pct}%",
             f"{h.day_change_pct}%",
-            h.purchase_date,
-            h.notes or ''
+            sanitize_csv_cell(h.purchase_date),
+            sanitize_csv_cell(h.notes or '')
         ])
 
     output.seek(0)
@@ -1460,59 +1662,133 @@ def goals():
     )
 
 
+def _resolve_and_check_account(user_id, account_id_str, amount):
+    acc_id = _parse_optional_int(account_id_str)
+    if not acc_id:
+        return None, None
+    acc = Account.query.filter_by(id=acc_id, user_id=user_id).first()
+    if not acc:
+        return None, None
+    ok, err_msg = check_sufficient_balance(acc, amount)
+    if not ok:
+        return None, err_msg
+    return acc, None
+
+
+def _record_goal_deposit_transaction(user_id, goal_id, title, amount, date_val, notes, acc):
+    linked_account_id = None
+    if acc is not None:
+        acc.balance = round(acc.balance - amount, 2)
+        linked_account_id = acc.id
+
+    txn = Transaction(
+        user_id=user_id,
+        account_id=linked_account_id,
+        title=title,
+        category='Savings & Goals',
+        amount=amount,
+        txn_type='expense',
+        payment_mode=PAY_BANK_TRANSFER,
+        date=date_val,
+        status='Completed',
+        notes=notes
+    )
+    db.session.add(txn)
+    _apply_budget_expense(user_id, 'Savings & Goals', amount, date_val)
+    db.session.flush()
+
+    gt = GoalTransaction(
+        goal_id=goal_id,
+        transaction_id=txn.id,
+        amount=amount,
+        date=date_val,
+        notes=notes
+    )
+    db.session.add(gt)
+
+
+def _validate_goal_fields(goal_name, goal_type, target_str, curr_str, target_date, return_str):
+    if not goal_name:
+        return None, 'Please enter a name for your goal.'
+    if goal_type not in VALID_GOAL_TYPES:
+        return None, 'Please choose a valid goal category.'
+    if not validate_iso_date(target_date):
+        return None, 'Please choose a valid target date (YYYY-MM-DD).'
+
+    target_amount = parse_finite_float(target_str)
+    current_amount = parse_finite_float(curr_str, default=0.0)
+    expected_return_rate = parse_finite_float(return_str, default=10.0)
+
+    if target_amount is None or current_amount is None or expected_return_rate is None:
+        return None, 'Please enter valid numbers for your goal amounts.'
+    if target_amount <= 0:
+        return None, 'Target amount must be greater than zero.'
+    if current_amount < 0:
+        return None, 'Saved amount cannot be negative.'
+    if not (0.0 <= expected_return_rate <= 100.0):
+        return None, 'Expected yearly return rate must be between 0% and 100%.'
+
+    return {
+        'goal_name': goal_name,
+        'goal_type': goal_type,
+        'target_amount': round(target_amount, 2),
+        'current_amount': round(current_amount, 2),
+        'target_date': target_date,
+        'expected_return_rate': round(expected_return_rate, 2)
+    }, None
+
+
 @app.route('/add-goal', methods=['POST'])
 @login_required
 def add_goal():
-    goal_name = request.form.get('goal_name', '').strip()
-    goal_type = request.form.get('goal_type', 'Other').strip()
-    target_str = request.form.get('target_amount', '0').strip()
-    curr_str = request.form.get('current_amount', '0').strip()
-    target_date = request.form.get('target_date', '').strip()
-    return_str = request.form.get('expected_return_rate', '10.0').strip()
+    parsed, err = _validate_goal_fields(
+        request.form.get('goal_name', '').strip(),
+        request.form.get('goal_type', 'Other').strip(),
+        request.form.get('target_amount', '').strip(),
+        request.form.get('current_amount', '0').strip(),
+        request.form.get('target_date', '').strip(),
+        request.form.get('expected_return_rate', '10.0').strip()
+    )
+    if err or not parsed:
+        flash(err or 'Unable to create goal.', 'danger')
+        return redirect(url_for('goals'))
 
-    try:
-        target_amount = float(target_str)
-        current_amount = float(curr_str) if curr_str else 0.0
-        expected_return_rate = float(return_str) if return_str else 10.0
-
-        if not goal_name:
-            flash('Goal name is required.', 'danger')
-            return redirect(url_for('goals'))
-        if target_amount <= 0:
-            flash('Target corpus amount must be positive.', 'danger')
-            return redirect(url_for('goals'))
-        if not target_date:
-            flash('Target completion date is required.', 'danger')
+    account_id_str = request.form.get('account_id', '').strip()
+    linked_acc = None
+    if parsed['current_amount'] > 0:
+        linked_acc, bal_err = _resolve_and_check_account(current_user.id, account_id_str, parsed['current_amount'])
+        if bal_err:
+            flash(bal_err, 'danger')
             return redirect(url_for('goals'))
 
-        g = Goal(
+    g = Goal(
+        user_id=current_user.id,
+        goal_name=parsed['goal_name'],
+        goal_type=parsed['goal_type'],
+        target_amount=parsed['target_amount'],
+        current_amount=parsed['current_amount'],
+        target_date=parsed['target_date'],
+        expected_return_rate=parsed['expected_return_rate'],
+        status='On Track'
+    )
+    db.session.add(g)
+    db.session.flush()
+    g.status = g.computed_status
+
+    if parsed['current_amount'] > 0:
+        today = datetime.now().strftime('%Y-%m-%d')
+        _record_goal_deposit_transaction(
             user_id=current_user.id,
-            goal_name=goal_name,
-            goal_type=goal_type,
-            target_amount=target_amount,
-            current_amount=current_amount,
-            target_date=target_date,
-            expected_return_rate=expected_return_rate,
-            status='On Track'
+            goal_id=g.id,
+            title=f'Goal Initial Deposit: {parsed["goal_name"]}',
+            amount=parsed['current_amount'],
+            date_val=today,
+            notes='Initial goal contribution',
+            acc=linked_acc
         )
-        db.session.add(g)
-        db.session.flush()
-        g.status = g.computed_status
 
-        if current_amount > 0:
-            gt = GoalTransaction(
-                goal_id=g.id,
-                amount=current_amount,
-                date=datetime.now().strftime('%Y-%m-%d'),
-                notes='Initial seed fund balance'
-            )
-            db.session.add(gt)
-
-        db.session.commit()
-        flash(f'Financial goal "{goal_name}" created with target projection tracking.', 'success')
-    except ValueError:
-        flash('Please enter valid numeric figures for financial targets.', 'danger')
-
+    db.session.commit()
+    flash(f'Savings goal "{parsed["goal_name"]}" created successfully!', 'success')
     return redirect(url_for('goals'))
 
 
@@ -1524,26 +1800,27 @@ def edit_goal(goal_id):
         flash(ERR_GOAL_NOT_FOUND, 'danger')
         return redirect(url_for('goals'))
 
-    goal_name = request.form.get('goal_name', goal.goal_name).strip()
-    goal_type = request.form.get('goal_type', goal.goal_type).strip()
-    target_str = request.form.get('target_amount', str(goal.target_amount)).strip()
-    curr_str = request.form.get('current_amount', str(goal.current_amount)).strip()
-    target_date = request.form.get('target_date', goal.target_date).strip()
-    return_str = request.form.get('expected_return_rate', str(goal.expected_return_rate)).strip()
+    parsed, err = _validate_goal_fields(
+        request.form.get('goal_name', goal.goal_name).strip(),
+        request.form.get('goal_type', goal.goal_type).strip(),
+        request.form.get('target_amount', str(goal.target_amount)).strip(),
+        request.form.get('current_amount', str(goal.current_amount)).strip(),
+        request.form.get('target_date', goal.target_date).strip(),
+        request.form.get('expected_return_rate', str(goal.expected_return_rate)).strip()
+    )
+    if err or not parsed:
+        flash(err or 'Unable to update goal.', 'danger')
+        return redirect(url_for('goals'))
 
-    try:
-        goal.goal_name = goal_name
-        goal.goal_type = goal_type
-        goal.target_amount = float(target_str)
-        goal.current_amount = float(curr_str)
-        goal.target_date = target_date
-        goal.expected_return_rate = float(return_str)
-        goal.status = goal.computed_status
-        db.session.commit()
-        flash(f'Goal "{goal.goal_name}" settings updated successfully.', 'success')
-    except ValueError:
-        flash('Please enter valid numeric values for goal targets.', 'danger')
-
+    goal.goal_name = parsed['goal_name']
+    goal.goal_type = parsed['goal_type']
+    goal.target_amount = parsed['target_amount']
+    goal.current_amount = parsed['current_amount']
+    goal.target_date = parsed['target_date']
+    goal.expected_return_rate = parsed['expected_return_rate']
+    goal.status = goal.computed_status
+    db.session.commit()
+    flash(f'Goal "{goal.goal_name}" updated successfully.', 'success')
     return redirect(url_for('goals'))
 
 
@@ -1555,53 +1832,52 @@ def contribute_goal(goal_id):
         flash(ERR_GOAL_NOT_FOUND, 'danger')
         return redirect(url_for('goals'))
 
-    amount_str = request.form.get('amount', '0').strip()
+    if goal.current_amount >= goal.target_amount:
+        flash('This goal is already 100% funded!', 'info')
+        return redirect(url_for('goals'))
+
+    amount = parse_finite_float(request.form.get('amount', '').strip())
     date_val = request.form.get('date', datetime.now().strftime('%Y-%m-%d')).strip()
     notes = request.form.get('notes', '').strip()
     account_id_str = request.form.get('account_id', '').strip()
 
-    try:
-        amount = float(amount_str)
-        if amount <= 0:
-            flash('Contribution amount must be greater than zero.', 'danger')
-            return redirect(url_for('goals'))
+    if amount is None or amount <= 0:
+        flash('Deposit amount must be a valid number greater than zero.', 'danger')
+        return redirect(url_for('goals'))
+    if not validate_iso_date(date_val):
+        flash('Please choose a valid deposit date (YYYY-MM-DD).', 'danger')
+        return redirect(url_for('goals'))
 
-        goal.current_amount = round(goal.current_amount + amount, 2)
-        goal.status = goal.computed_status
-
-        gt = GoalTransaction(
-            goal_id=goal.id,
-            amount=amount,
-            date=date_val,
-            notes=notes or f"Contribution to {goal.goal_name}"
+    amount = round(amount, 2)
+    remaining = round(goal.remaining_amount, 2)
+    if amount > remaining:
+        flash(
+            f'Deposit exceeds the remaining target for "{goal.goal_name}". '
+            f'You only need {format_money(remaining)} more to reach 100%.',
+            'danger'
         )
-        db.session.add(gt)
+        return redirect(url_for('goals'))
 
-        if account_id_str:
-            acc = db.session.get(Account, int(account_id_str))
-            if acc and acc.user_id == current_user.id:
-                acc.balance = round(acc.balance - amount, 2)
-                txn = Transaction(
-                    user_id=current_user.id,
-                    account_id=acc.id,
-                    title=f"Goal Contribution: {goal.goal_name}",
-                    category='Savings & Goals',
-                    amount=amount,
-                    txn_type='expense',
-                    payment_mode=PAY_BANK_TRANSFER,
-                    date=date_val,
-                    status='Completed',
-                    notes=notes or f"Fund transfer to {goal.goal_name}"
-                )
-                db.session.add(txn)
-                db.session.flush()
-                gt.transaction_id = txn.id
+    linked_acc, bal_err = _resolve_and_check_account(current_user.id, account_id_str, amount)
+    if bal_err:
+        flash(bal_err, 'danger')
+        return redirect(url_for('goals'))
 
-        db.session.commit()
-        flash(f'Added {format_money(amount)} contribution to {goal.goal_name} successfully!', 'success')
-    except ValueError:
-        flash('Please enter a valid numeric contribution amount.', 'danger')
+    goal.current_amount = round(goal.current_amount + amount, 2)
+    goal.status = goal.computed_status
 
+    _record_goal_deposit_transaction(
+        user_id=current_user.id,
+        goal_id=goal.id,
+        title=f'Goal Contribution: {goal.goal_name}',
+        amount=amount,
+        date_val=date_val,
+        notes=notes or f'Contribution to {goal.goal_name}',
+        acc=linked_acc
+    )
+
+    db.session.commit()
+    flash(f'Added {format_money(amount)} to "{goal.goal_name}" and recorded it in your transactions!', 'success')
     return redirect(url_for('goals'))
 
 
@@ -1614,9 +1890,12 @@ def delete_goal(goal_id):
         return redirect(url_for('goals'))
 
     name = goal.goal_name
+    for gt in goal.contributions:
+        gt.transaction_id = None
+    db.session.flush()
     db.session.delete(goal)
     db.session.commit()
-    flash(f'Financial goal "{name}" deleted successfully.', 'success')
+    flash(f'Savings goal "{name}" deleted successfully.', 'success')
     return redirect(url_for('goals'))
 
 
@@ -1662,11 +1941,10 @@ def _parse_profile_age(age_str, default_age):
 def _parse_profile_income(income_str, default_income):
     if not income_str:
         return default_income
-    try:
-        val = float(income_str)
-        return val if val >= 0 else default_income
-    except ValueError:
+    val = parse_finite_float(income_str)
+    if val is None or val < 0:
         return default_income
+    return round(val, 2)
 
 
 @app.route('/settings/profile', methods=['POST'])
@@ -1748,7 +2026,7 @@ def update_theme():
     return redirect(url_for('settings'))
 
 
-@app.route('/toggle-theme', methods=['POST', 'GET'])
+@app.route('/toggle-theme', methods=['POST'])
 @login_required
 def toggle_theme():
     current_user.theme = 'dark' if current_user.theme == 'light' else 'light'
@@ -1765,74 +2043,217 @@ def _parse_optional_int(val_str):
         return None
 
 
-def _apply_transaction_side_effects(user_id, account_id, category, txn_type, amount):
+def _budget_matches_txn_date(budget, date_str):
+    if not date_str:
+        return True
+    now = datetime.now()
+    if budget.period == 'Monthly':
+        return date_str.startswith(now.strftime('%Y-%m'))
+    if budget.period == 'Yearly':
+        return date_str.startswith(now.strftime('%Y'))
+    return False
+
+
+def _apply_budget_expense(user_id, category, amount, date_str=None):
+    matched_budgets = BudgetCategory.query.filter(
+        BudgetCategory.user_id == user_id,
+        func.lower(BudgetCategory.name) == category.lower()
+    ).all()
+    for b in matched_budgets:
+        if _budget_matches_txn_date(b, date_str):
+            b.spent = round(b.spent + amount, 2)
+
+
+def _apply_transaction_side_effects(user_id, account_id, category, txn_type, amount, date_str=None):
     if account_id:
         acc = Account.query.filter_by(id=account_id, user_id=user_id).first()
         if acc:
-            acc.balance += amount if txn_type == 'income' else -amount
+            delta = amount if txn_type == 'income' else -amount
+            acc.balance = round(acc.balance + delta, 2)
 
     if txn_type == 'expense':
-        matched_budget = BudgetCategory.query.filter_by(user_id=user_id, name=category).first()
-        if matched_budget:
-            matched_budget.spent += amount
+        _apply_budget_expense(user_id, category, amount, date_str)
 
 
 def _revert_transaction_side_effects(user_id, txn):
     if txn.account_id:
         acc = Account.query.filter_by(id=txn.account_id, user_id=user_id).first()
         if acc:
-            acc.balance += -txn.amount if txn.txn_type == 'income' else txn.amount
+            delta = -txn.amount if txn.txn_type == 'income' else txn.amount
+            acc.balance = round(acc.balance + delta, 2)
 
     if txn.txn_type == 'expense':
-        matched_budget = BudgetCategory.query.filter_by(user_id=user_id, name=txn.category).first()
-        if matched_budget:
-            matched_budget.spent = max(0.0, matched_budget.spent - txn.amount)
+        matched_budgets = BudgetCategory.query.filter(
+            BudgetCategory.user_id == user_id,
+            func.lower(BudgetCategory.name) == txn.category.lower()
+        ).all()
+        for b in matched_budgets:
+            if _budget_matches_txn_date(b, txn.date):
+                b.spent = round(max(0.0, b.spent - txn.amount), 2)
+
+
+def _simulate_edit_account_balances(user_id, txn, new_account_id, new_type, new_amount):
+    old_delta = txn.amount if txn.txn_type == 'income' else -txn.amount
+    new_delta = new_amount if new_type == 'income' else -new_amount
+
+    if txn.account_id and txn.account_id == new_account_id:
+        acc = Account.query.filter_by(id=txn.account_id, user_id=user_id).first()
+        if acc and acc.account_type != PAY_CREDIT_CARD:
+            projected = round(acc.balance - old_delta + new_delta, 2)
+            if projected < 0.0:
+                return (
+                    f'Insufficient balance in {acc.name} for this update '
+                    f'(Available after change would be {format_money(projected)}). '
+                    f'Choose another account or adjust the amount.'
+                )
+        return None
+
+    if txn.account_id:
+        old_acc = Account.query.filter_by(id=txn.account_id, user_id=user_id).first()
+        if old_acc and old_acc.account_type != PAY_CREDIT_CARD:
+            projected_old = round(old_acc.balance - old_delta, 2)
+            if projected_old < 0.0:
+                return (
+                    f'Cannot change account on {old_acc.name} because funds from this income '
+                    f'have already been spent (Available: {format_money(old_acc.balance)}).'
+                )
+
+    if new_account_id:
+        new_acc = Account.query.filter_by(id=new_account_id, user_id=user_id).first()
+        if new_acc and new_type == 'expense':
+            ok, err_msg = check_sufficient_balance(new_acc, new_amount)
+            if not ok:
+                return err_msg
+    return None
+
+
+def _parse_transaction_form():
+    title = request.form.get('title', '').strip()
+    category = request.form.get('category', '').strip()
+    amount = parse_finite_float(request.form.get('amount', '').strip())
+    txn_type = request.form.get('txn_type', 'expense').strip().lower()
+    payment_mode = request.form.get('payment_mode', 'UPI').strip()
+    account_id = _parse_optional_int(request.form.get('account_id', '').strip())
+    date_val = request.form.get('date', datetime.now().strftime('%Y-%m-%d')).strip()
+    notes = request.form.get('notes', '').strip()
+
+    if txn_type not in VALID_TXN_TYPES:
+        return None, 'Transaction type must be expense or income.'
+    if amount is None or amount <= 0:
+        return None, 'Amount must be a valid number greater than zero.'
+    if not title or not category:
+        return None, 'Description and category are required.'
+    if not payment_mode:
+        return None, 'Payment method is required.'
+    if not validate_iso_date(date_val):
+        return None, 'Please enter a valid transaction date (YYYY-MM-DD).'
+
+    return {
+        'title': title,
+        'category': category,
+        'amount': round(amount, 2),
+        'txn_type': txn_type,
+        'payment_mode': payment_mode,
+        'account_id': account_id,
+        'date': date_val,
+        'notes': notes
+    }, None
 
 
 @app.route('/add-transaction', methods=['POST'])
 @login_required
 def add_transaction():
-    title = request.form.get('title', '').strip()
-    category = request.form.get('category', '').strip()
-    amount_str = request.form.get('amount', '0').strip()
-    txn_type = request.form.get('txn_type', 'expense').strip().lower()
-    payment_mode = request.form.get('payment_mode', 'UPI').strip()
-    account_id_str = request.form.get('account_id', '').strip()
-    date_val = request.form.get('date', datetime.now().strftime('%Y-%m-%d')).strip()
-    notes = request.form.get('notes', '').strip()
-
-    try:
-        amount = float(amount_str)
-        if amount <= 0:
-            flash('Transaction amount must be greater than zero.', 'danger')
-            return redirect(request.referrer or url_for('dashboard'))
-    except ValueError:
-        flash('Please enter a valid numeric transaction amount.', 'danger')
+    parsed, err = _parse_transaction_form()
+    if err or not parsed:
+        flash(err or 'Unable to save transaction.', 'danger')
         return redirect(request.referrer or url_for('dashboard'))
 
-    if not title or not category:
-        flash('Transaction title and category are required.', 'danger')
-        return redirect(request.referrer or url_for('dashboard'))
+    linked_acc = None
+    if parsed['account_id']:
+        linked_acc = Account.query.filter_by(id=parsed['account_id'], user_id=current_user.id).first()
+        if not linked_acc:
+            parsed['account_id'] = None
+        elif parsed['txn_type'] == 'expense':
+            ok, bal_err = check_sufficient_balance(linked_acc, parsed['amount'])
+            if not ok:
+                flash(bal_err, 'danger')
+                return redirect(request.referrer or url_for('dashboard'))
 
-    account_id = _parse_optional_int(account_id_str)
     new_txn = Transaction(
         user_id=current_user.id,
-        account_id=account_id,
-        title=title,
-        category=category,
-        amount=amount,
-        txn_type=txn_type,
-        payment_mode=payment_mode,
-        date=date_val,
+        account_id=parsed['account_id'],
+        title=parsed['title'],
+        category=parsed['category'],
+        amount=parsed['amount'],
+        txn_type=parsed['txn_type'],
+        payment_mode=parsed['payment_mode'],
+        date=parsed['date'],
         status='Completed',
-        notes=notes
+        notes=parsed['notes']
     )
     db.session.add(new_txn)
-    _apply_transaction_side_effects(current_user.id, account_id, category, txn_type, amount)
+    _apply_transaction_side_effects(
+        current_user.id,
+        parsed['account_id'],
+        parsed['category'],
+        parsed['txn_type'],
+        parsed['amount'],
+        parsed['date']
+    )
 
     db.session.commit()
-    _, sym = get_user_currency_info()
-    flash(f'Transaction "{title}" ({sym}{amount:,.2f}) recorded successfully.', 'success')
+    label = 'Income' if parsed['txn_type'] == 'income' else 'Expense'
+    flash(f'{label} "{parsed["title"]}" ({format_money(parsed["amount"])}) saved!', 'success')
+    return redirect(request.referrer or url_for('dashboard'))
+
+
+@app.route('/edit-transaction/<int:txn_id>', methods=['POST'])
+@login_required
+def edit_transaction(txn_id):
+    txn = Transaction.query.filter_by(id=txn_id, user_id=current_user.id).first()
+    if not txn:
+        flash('Transaction not found.', 'danger')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    parsed, err = _parse_transaction_form()
+    if err or not parsed:
+        flash(err or 'Unable to update transaction.', 'danger')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    if parsed['account_id']:
+        acc = Account.query.filter_by(id=parsed['account_id'], user_id=current_user.id).first()
+        if not acc:
+            parsed['account_id'] = None
+
+    sim_err = _simulate_edit_account_balances(
+        current_user.id, txn, parsed['account_id'], parsed['txn_type'], parsed['amount']
+    )
+    if sim_err:
+        flash(sim_err, 'danger')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    _revert_transaction_side_effects(current_user.id, txn)
+
+    txn.title = parsed['title']
+    txn.category = parsed['category']
+    txn.amount = parsed['amount']
+    txn.txn_type = parsed['txn_type']
+    txn.payment_mode = parsed['payment_mode']
+    txn.account_id = parsed['account_id']
+    txn.date = parsed['date']
+    txn.notes = parsed['notes']
+
+    _apply_transaction_side_effects(
+        current_user.id,
+        parsed['account_id'],
+        parsed['category'],
+        parsed['txn_type'],
+        parsed['amount'],
+        parsed['date']
+    )
+
+    db.session.commit()
+    flash(f'Transaction "{txn.title}" updated successfully.', 'success')
     return redirect(request.referrer or url_for('dashboard'))
 
 
@@ -1840,11 +2261,31 @@ def add_transaction():
 @login_required
 def delete_transaction(txn_id):
     txn = Transaction.query.filter_by(id=txn_id, user_id=current_user.id).first()
-    if txn:
-        _revert_transaction_side_effects(current_user.id, txn)
-        db.session.delete(txn)
-        db.session.commit()
-        flash('Transaction removed from financial ledger.', 'info')
+    if not txn:
+        return redirect(request.referrer or url_for('dashboard'))
+
+    if txn.txn_type == 'income' and txn.account_id:
+        acc = Account.query.filter_by(id=txn.account_id, user_id=current_user.id).first()
+        if acc and acc.account_type != PAY_CREDIT_CARD and round(acc.balance - txn.amount, 2) < 0.0:
+            flash(
+                f'Cannot delete this income because funds from {acc.name} have already been spent '
+                f'(Available: {format_money(acc.balance)}, Income: {format_money(txn.amount)}).',
+                'danger'
+            )
+            return redirect(request.referrer or url_for('dashboard'))
+
+    linked_gts = GoalTransaction.query.filter_by(transaction_id=txn.id).all()
+    for gt in linked_gts:
+        goal = db.session.get(Goal, gt.goal_id)
+        if goal and goal.user_id == current_user.id:
+            goal.current_amount = round(max(0.0, goal.current_amount - gt.amount), 2)
+            goal.status = goal.computed_status
+        db.session.delete(gt)
+
+    _revert_transaction_side_effects(current_user.id, txn)
+    db.session.delete(txn)
+    db.session.commit()
+    flash('Transaction deleted.', 'info')
     return redirect(request.referrer or url_for('dashboard'))
 
 
@@ -1869,8 +2310,8 @@ def _validate_reg_contact(fullname, email, phone, country):
 def _validate_reg_credentials(address, role, business_name, password, confirm_password, email):
     if not address:
         return 'Residential / Business address is required.'
-    if role not in ['user', 'shop_owner', 'admin']:
-        return 'Please select a valid account role.'
+    if role not in PUBLIC_SIGNUP_ROLES:
+        return 'Public registration is only available for Standard User and Shop Owner accounts.'
     if role == 'shop_owner' and not business_name:
         return 'Shop or business name is required for Shop Owner accounts.'
     if len(password) < 8:
@@ -1894,12 +2335,12 @@ def _parse_reg_age_and_income(age_str, income_str):
 
     total_income = 0.0
     if income_str:
-        try:
-            total_income = float(income_str)
-            if total_income < 0:
-                return age, 0.0, 'Total income cannot be negative.'
-        except ValueError:
+        parsed_inc = parse_finite_float(income_str)
+        if parsed_inc is None:
             return age, 0.0, 'Please enter a valid numeric total income amount.'
+        if parsed_inc < 0:
+            return age, 0.0, 'Total income cannot be negative.'
+        total_income = round(parsed_inc, 2)
     return age, total_income, None
 
 
@@ -2026,8 +2467,10 @@ def login():
 
         clear_failed_logins(client_key)
         login_user(user, remember=remember_me)
-        next_page = request.args.get('next')
-        return redirect(next_page or url_for('dashboard'))
+        next_page = request.args.get('next') or request.form.get('next')
+        if is_safe_redirect_url(next_page):
+            return redirect(next_page)
+        return redirect(url_for('dashboard'))
 
     return render_template(TPL_LOGIN, email='', selected_role='user')
 

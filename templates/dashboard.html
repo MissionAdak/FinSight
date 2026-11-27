@@ -1,71 +1,117 @@
 {% extends "base_app.html" %}
 
-{% block title %}FinSight Dashboard — {{ current_user.fullname }}{% endblock %}
+{% block title %}Dashboard — FinSight{% endblock %}
 
 {% block content %}
 <div class="dashboard-content-grid">
 
   <div class="dashboard-hero-banner">
-    <div class="hero-text-block">
-      <div class="hero-pill">
-        <span class="status-indicator-dot"></span> Active FinSight Telemetry
+    <div class="dashboard-hero-top">
+      <div class="hero-text-block">
+        <h2 class="hero-title">Welcome back, {{ current_user.fullname }}!</h2>
+        <p class="hero-subtitle">
+          Here is a clear overview of your money for
+          <strong class="text-blue">
+            {% if current_user.is_shop_owner %}
+              {{ current_user.business_name or 'your store' }}
+            {% elif current_user.is_admin %}
+              {{ current_user.business_name or 'your organization' }}
+            {% else %}
+              your personal finances
+            {% endif %}
+          </strong>.
+        </p>
       </div>
-      <h2 class="hero-title">Financial Reporting &amp; Budget Tracking</h2>
-      <p class="hero-subtitle">
-        Overview for 
-        <strong class="text-blue">
-          {% if current_user.is_shop_owner %}
-            {{ current_user.business_name or 'Retail Storefront & Wholesale Operations' }}
-          {% elif current_user.is_admin %}
-            FinSight Enterprise Portfolio &amp; Merchant Clearing
-          {% else %}
-            Personal Wealth &amp; Living Budget Workspace
-          {% endif %}
-        </strong>
-      </p>
+
+      <div class="period-toggle-pill" role="group" aria-label="Choose summary time period">
+        <a href="{{ url_for('dashboard', period='month') }}" class="period-pill-btn {% if period == 'month' %}active{% endif %}">This Month</a>
+        <a href="{{ url_for('dashboard', period='all') }}" class="period-pill-btn {% if period == 'all' %}active{% endif %}">All Time</a>
+      </div>
+    </div>
+
+    <div class="quick-action-bar">
+      <button type="button" class="btn-qa btn-qa-expense" onclick="openTransactionModal('expense')">
+        + Add Expense
+      </button>
+      <button type="button" class="btn-qa btn-qa-income" onclick="openTransactionModal('income')">
+        + Add Income
+      </button>
+      <a href="{{ url_for('goals', new=1) }}" class="btn-qa btn-qa-goal">
+        + New Goal
+      </a>
     </div>
 
     <div class="hero-profile-summary">
-      <div class="profile-tag-item"><strong>Country:</strong> {{ current_user.country or 'India' }}</div>
-      <span class="hero-divider">•</span>
+      <div class="profile-tag-item"><strong>Showing:</strong> {{ period_label }}</div>
+      <span class="hero-divider">&bull;</span>
       <div class="profile-tag-item"><strong>Currency:</strong> <span class="badge-curr">{{ currency_code }} ({{ currency_symbol }})</span></div>
-      <span class="hero-divider">•</span>
-      <div class="profile-tag-item"><strong>Contact:</strong> {{ current_user.phone or 'Not Provided' }}</div>
+      <span class="hero-divider">&bull;</span>
+      <div class="profile-tag-item"><strong>Country:</strong> {{ current_user.country or 'India' }}</div>
       {% if current_user.total_income and current_user.total_income > 0 %}
-        <span class="hero-divider">•</span>
-        <div class="profile-tag-item"><strong>Annual Income:</strong> <span class="font-mono font-bold text-blue">{{ format_money(current_user.total_income) }}</span></div>
+        <span class="hero-divider">&bull;</span>
+        <div class="profile-tag-item"><strong>Yearly Income Goal:</strong> <span class="font-mono font-bold text-blue">{{ format_money(current_user.total_income) }}</span></div>
       {% endif %}
+    </div>
+  </div>
+
+  <div id="quickstart-guide-card" class="quickstart-card">
+    <div class="quickstart-header">
+      <h3 class="quickstart-title">New to FinSight? Start in 3 Easy Steps</h3>
+      <button type="button" class="quickstart-dismiss-btn" onclick="dismissQuickstartGuide()">Hide Guide &times;</button>
+    </div>
+    <div class="quickstart-steps">
+      <div class="quickstart-step">
+        <span class="step-num-badge">1</span>
+        <div>
+          <strong>Track Daily Money</strong>
+          <p>Click <em>+ Add Expense</em> or <em>+ Add Income</em> whenever money moves.</p>
+        </div>
+      </div>
+      <div class="quickstart-step">
+        <span class="step-num-badge">2</span>
+        <div>
+          <strong>Stay Under Budget</strong>
+          <p>Set monthly limits on the <a href="{{ url_for('budgets') }}">Budgets</a> page to get automatic alerts.</p>
+        </div>
+      </div>
+      <div class="quickstart-step">
+        <span class="step-num-badge">3</span>
+        <div>
+          <strong>Plan a Goal</strong>
+          <p>Create a savings target on <a href="{{ url_for('goals') }}">Goals</a> and watch your progress bar grow.</p>
+        </div>
+      </div>
     </div>
   </div>
 
   <div class="kpi-cards-grid">
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Total Inflow (Income)</span>
+        <span class="kpi-label">Total Income (Money In)</span>
         <span class="kpi-icon-pill icon-inflow">&#8593;</span>
       </div>
       <div class="kpi-figure text-blue font-mono">{{ format_money(total_income) }}</div>
       <div class="kpi-sub">
-        <span class="kpi-badge-positive">+14.6%</span>
-        <span>vs previous fiscal period</span>
+        <span class="kpi-badge-neutral">{{ period_label }}</span>
+        <span>{{ income_count }} income {{ 'entry' if income_count == 1 else 'entries' }}</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Total Outflow (Expenses)</span>
+        <span class="kpi-label">Total Expenses (Money Spent)</span>
         <span class="kpi-icon-pill icon-outflow">&#8595;</span>
       </div>
       <div class="kpi-figure text-dark font-mono">{{ format_money(total_expense) }}</div>
       <div class="kpi-sub">
-        <span class="kpi-badge-neutral">{{ (total_expense / total_income * 100)|round(1) if total_income > 0 else 0 }}%</span>
-        <span>absorption ratio</span>
+        <span class="kpi-badge-neutral">{{ spend_pct }}%</span>
+        <span>of your income spent ({{ period_label }})</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Total Savings (Net Profit)</span>
+        <span class="kpi-label">Money Saved</span>
         <span class="kpi-icon-pill icon-savings">&#9670;</span>
       </div>
       <div class="kpi-figure {% if net_profit >= 0 %}text-green{% else %}text-danger{% endif %} font-mono">
@@ -73,19 +119,22 @@
       </div>
       <div class="kpi-sub">
         <span class="kpi-badge-positive">{{ operating_margin }}%</span>
-        <span>operating net margin</span>
+        <span>Income minus expenses &bull; saved from income</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Budget Utilization</span>
+        <span class="kpi-label">
+          Budget Utilization
+          <button type="button" class="help-tip" data-tip="How much of your monthly budget limits you have spent so far." aria-label="What is Budget Utilization">?</button>
+        </span>
         <span class="kpi-icon-pill icon-budget">&#37;</span>
       </div>
       <div class="kpi-figure text-blue font-mono">{{ budget_utilization }}%</div>
       <div class="kpi-sub">
-        <span class="kpi-badge-neutral">{{ format_money(budget_variance) }}</span>
-        <span>remaining variance cap</span>
+        <span class="kpi-badge-neutral">{{ format_money(budget_variance|abs) }}</span>
+        <span>{% if budget_variance >= 0 %}left in your budget{% else %}over your budget{% endif %}</span>
       </div>
     </div>
   </div>
@@ -94,45 +143,51 @@
     <div class="chart-card">
       <div class="chart-card-header">
         <div>
-          <h3 class="chart-title">Expense Breakdown by Category</h3>
-          <span class="chart-caption">Categorical distribution across active ledger</span>
+          <h3 class="chart-title">Where Your Money Goes</h3>
+          <span class="chart-caption">Spending by category ({{ period_label }})</span>
         </div>
         <div class="chart-total-pill">
           <span>Total: <strong>{{ format_money(total_expense) }}</strong></span>
         </div>
       </div>
-      <div class="donut-chart-container">
-        <div class="donut-canvas-wrap">
-          <canvas id="expenseDonutChart" data-labels="{{ donut_labels|tojson|forceescape }}" data-values="{{ donut_data|tojson|forceescape }}" data-colors="{{ donut_colors|tojson|forceescape }}" data-currency="{{ currency_symbol }}"></canvas>
-        </div>
-        <div class="donut-legend-list">
-          {% for item in donut_items %}
-            <div class="donut-legend-row">
-              <div class="legend-color-label">
-                <span class="legend-swatch" data-bg="{{ item.color }}"></span>
-                <span class="legend-name">{{ item.name }}</span>
+      {% if donut_items %}
+        <div class="donut-chart-container">
+          <div class="donut-canvas-wrap">
+            <canvas id="expenseDonutChart" data-labels="{{ donut_labels|tojson|forceescape }}" data-values="{{ donut_data|tojson|forceescape }}" data-colors="{{ donut_colors|tojson|forceescape }}" data-currency="{{ currency_symbol }}"></canvas>
+          </div>
+          <div class="donut-legend-list">
+            {% for item in donut_items %}
+              <div class="donut-legend-row">
+                <div class="legend-color-label">
+                  <span class="legend-swatch" data-bg="{{ item.color }}"></span>
+                  <span class="legend-name">{{ item.name }}</span>
+                </div>
+                <div class="legend-values">
+                  <span class="legend-amount font-mono">{{ format_money(item.amount) }}</span>
+                  <span class="legend-pct">{{ item.pct }}%</span>
+                </div>
               </div>
-              <div class="legend-values">
-                <span class="legend-amount font-mono">{{ format_money(item.amount) }}</span>
-                <span class="legend-pct">{{ item.pct }}%</span>
-              </div>
-            </div>
-          {% else %}
-            <div class="no-chart-data">No expense records found.</div>
-          {% endfor %}
+            {% endfor %}
+          </div>
         </div>
-      </div>
+      {% else %}
+        <div class="empty-state-box">
+          <div class="empty-state-title">No expenses recorded for {{ period_label }}</div>
+          <p class="empty-state-desc">Add your first expense to see a clear breakdown of where your money goes.</p>
+          <button type="button" class="btn-sm-primary" onclick="openTransactionModal('expense')">+ Add Expense</button>
+        </div>
+      {% endif %}
     </div>
 
     <div class="chart-card">
       <div class="chart-card-header">
         <div>
-          <h3 class="chart-title">Monthly Trend (Income vs. Expenses)</h3>
-          <span class="chart-caption">6-Month historical cashflow trajectory</span>
+          <h3 class="chart-title">Income vs. Expenses (Last 6 Months)</h3>
+          <span class="chart-caption">See how your money in compares to money spent each month</span>
         </div>
         <div class="chart-legend-row">
-          <span class="legend-indicator dot-blue"></span> Inflow
-          <span class="legend-indicator dot-orange ml-3"></span> Outflow
+          <span class="legend-indicator dot-blue"></span> Income
+          <span class="legend-indicator dot-orange ml-3"></span> Expenses
         </div>
       </div>
       <div class="line-chart-container">
@@ -145,12 +200,12 @@
     <div class="card-header-flex">
       <div>
         <h3 class="card-title">Recent Transactions</h3>
-        <span class="card-caption">Latest book of accounts entries</span>
+        <span class="card-caption">Your latest income &amp; spending ({{ period_label }})</span>
       </div>
       <div class="header-action-links">
-        <a href="{{ url_for('expenses') }}" class="btn-subtle">View All Expenses</a>
-        <a href="{{ url_for('income') }}" class="btn-subtle">View All Inflows</a>
-        <button type="button" class="btn-sm-primary" onclick="openModal('modal-transaction')">+ New Entry</button>
+        <a href="{{ url_for('expenses') }}" class="btn-subtle">All Expenses</a>
+        <a href="{{ url_for('income') }}" class="btn-subtle">All Income</a>
+        <button type="button" class="btn-sm-primary" onclick="openTransactionModal('expense')">+ Add Expense</button>
       </div>
     </div>
 
@@ -159,12 +214,12 @@
         <thead>
           <tr>
             <th>Date</th>
-            <th>Description / Payee</th>
+            <th>Description</th>
             <th>Category</th>
             <th>Type</th>
-            <th>Payment Mode</th>
+            <th>Payment Method</th>
             <th class="text-right">Amount</th>
-            <th class="text-right">Action</th>
+            <th class="text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -180,25 +235,37 @@
               <td><span class="tag-category">{{ t.category }}</span></td>
               <td>
                 {% if t.txn_type == 'income' %}
-                  <span class="badge-type badge-income">&#8593; Inflow</span>
+                  <span class="badge-type badge-income">&#8593; Income</span>
                 {% else %}
-                  <span class="badge-type badge-expense">&#8595; Outflow</span>
+                  <span class="badge-type badge-expense">&#8595; Expense</span>
                 {% endif %}
               </td>
               <td><span class="tag-mode">{{ t.payment_mode or 'UPI' }}</span></td>
-              <td class="text-right font-mono font-bold {% if t.txn_type == 'income' %}text-blue{% else %}text-dark{% endif %}">
+              <td class="text-right font-mono font-bold {% if t.txn_type == 'income' %}text-green{% else %}text-dark{% endif %}">
                 {% if t.txn_type == 'income' %}+{% else %}-{% endif %}{{ format_money(t.amount) }}
               </td>
               <td class="text-right">
-                <form method="POST" action="{{ url_for('delete_transaction', txn_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Remove this transaction record?');">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-                  <button type="submit" class="btn-delete-row" title="Delete record">&times;</button>
-                </form>
+                <div class="row-actions-group">
+                  <button type="button" class="btn-edit-row" data-id="{{ t.id }}" data-title="{{ t.title }}" data-category="{{ t.category }}" data-amount="{{ t.amount }}" data-type="{{ t.txn_type }}" data-mode="{{ t.payment_mode or 'UPI' }}" data-account-id="{{ t.account_id or '' }}" data-date="{{ t.date }}" data-notes="{{ t.notes or '' }}" onclick="openEditTransactionModal(this)">Edit</button>
+                  <form method="POST" action="{{ url_for('delete_transaction', txn_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                    <button type="submit" class="btn-delete-row" title="Delete transaction" aria-label="Delete transaction">&times;</button>
+                  </form>
+                </div>
               </td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="7" class="empty-table-state">No transaction records found. Click "+ New Entry" above to record an inflow or expense.</td>
+              <td colspan="7">
+                <div class="empty-state-box">
+                  <div class="empty-state-title">No transactions yet for {{ period_label }}</div>
+                  <p class="empty-state-desc">Start tracking your money by adding an expense or income below.</p>
+                  <div class="empty-state-actions">
+                    <button type="button" class="btn-qa btn-qa-expense" onclick="openTransactionModal('expense')">+ Add Expense</button>
+                    <button type="button" class="btn-qa btn-qa-income" onclick="openTransactionModal('income')">+ Add Income</button>
+                  </div>
+                </div>
+              </td>
             </tr>
           {% endfor %}
         </tbody>
@@ -211,7 +278,22 @@
 
 {% block scripts %}
 <script>
+  function dismissQuickstartGuide() {
+    var card = document.getElementById('quickstart-guide-card');
+    if (card) card.style.display = 'none';
+    try {
+      localStorage.setItem('finsight_quickstart_dismissed', '1');
+    } catch (e) {}
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
+    try {
+      if (localStorage.getItem('finsight_quickstart_dismissed') === '1') {
+        var card = document.getElementById('quickstart-guide-card');
+        if (card) card.style.display = 'none';
+      }
+    } catch (e) {}
+
     var isDark = document.documentElement.dataset.theme === 'dark';
     var gridColor = isDark ? '#1f2937' : '#f1f5f9';
     var textColor = isDark ? '#94a3b8' : '#64748b';
@@ -222,12 +304,6 @@
       var dData = JSON.parse(donutCtx.dataset.values || '[]');
       var dColors = JSON.parse(donutCtx.dataset.colors || '[]');
       var dCurr = donutCtx.dataset.currency || '';
-
-      if (dData.length === 0) {
-        dLabels = ['No Expenses'];
-        dData = [1];
-        dColors = [isDark ? '#374151' : '#e2e8f0'];
-      }
 
       new Chart(donutCtx, {
         type: 'doughnut',
@@ -271,7 +347,7 @@
           labels: tLabels,
           datasets: [
             {
-              label: 'Inflows',
+              label: 'Income',
               data: tIncome,
               borderColor: '#1a56db',
               backgroundColor: 'rgba(26, 86, 219, 0.08)',
@@ -282,7 +358,7 @@
               pointBackgroundColor: '#1a56db'
             },
             {
-              label: 'Expenditures',
+              label: 'Expenses',
               data: tExpense,
               borderColor: '#f97316',
               backgroundColor: 'rgba(249, 115, 22, 0.08)',

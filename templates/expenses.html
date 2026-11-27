@@ -8,34 +8,43 @@
   <div class="module-summary-grid">
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Total Outflows</span>
+        <span class="kpi-label">
+          Total Expenses (Money Spent)
+          {% if is_filtered %}<span class="kpi-filtered-pill">Filtered</span>{% endif %}
+        </span>
         <span class="kpi-icon-pill icon-outflow">&#8595;</span>
       </div>
       <div class="kpi-figure text-dark font-mono">{{ format_money(total_expense) }}</div>
       <div class="kpi-sub">
-        <span>Across {{ transactions|length }} recorded expenditures</span>
+        <span>Across {{ transactions|length }} {{ 'expense' if transactions|length == 1 else 'expenses' }} shown</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Average Expenditure</span>
+        <span class="kpi-label">
+          Average Expense
+          {% if is_filtered %}<span class="kpi-filtered-pill">Filtered</span>{% endif %}
+        </span>
         <span class="kpi-icon-pill icon-budget">&#8764;</span>
       </div>
       <div class="kpi-figure text-blue font-mono">{{ format_money(avg_expense) }}</div>
       <div class="kpi-sub">
-        <span>Mean transaction burn</span>
+        <span>Average per purchase</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Top Expense Category</span>
+        <span class="kpi-label">
+          Top Spending Category
+          {% if is_filtered %}<span class="kpi-filtered-pill">Filtered</span>{% endif %}
+        </span>
         <span class="kpi-icon-pill icon-savings">&#9670;</span>
       </div>
       <div class="kpi-figure text-blue text-lg font-bold">{{ top_cat }}</div>
       <div class="kpi-sub">
-        <span>Largest outflow concentration</span>
+        <span>Where most of your money went</span>
       </div>
     </div>
   </div>
@@ -44,7 +53,17 @@
     <form method="GET" action="{{ url_for('expenses') }}" class="filter-form">
       <div class="filter-group-input">
         <label for="expense-search" class="sr-only">Search expenses</label>
-        <input type="text" id="expense-search" name="q" value="{{ search }}" placeholder="Search description, payee or notes..." class="field-input">
+        <input type="text" id="expense-search" name="q" value="{{ search }}" placeholder="Search by name or note..." class="field-input">
+      </div>
+
+      <div class="filter-group-select">
+        <label for="expense-month" class="sr-only">Filter by month</label>
+        <select id="expense-month" name="month" class="field-input">
+          <option value="">All Time</option>
+          {% for mo in month_options %}
+            <option value="{{ mo.value }}" {% if selected_month == mo.value %}selected{% endif %}>{{ mo.label }}</option>
+          {% endfor %}
+        </select>
       </div>
 
       <div class="filter-group-select">
@@ -58,9 +77,9 @@
       </div>
 
       <div class="filter-group-select">
-        <label for="expense-mode" class="sr-only">Filter by payment mode</label>
+        <label for="expense-mode" class="sr-only">Filter by payment method</label>
         <select id="expense-mode" name="mode" class="field-input">
-          <option value="">All Payment Modes</option>
+          <option value="">All Payment Methods</option>
           {% for m in payment_modes %}
             <option value="{{ m }}" {% if selected_mode == m %}selected{% endif %}>{{ m }}</option>
           {% endfor %}
@@ -68,15 +87,15 @@
       </div>
 
       <div class="filter-actions">
-        <button type="submit" class="btn-primary" style="width:auto; padding:0 18px;">Apply Filter</button>
-        {% if search or selected_category or selected_mode %}
+        <button type="submit" class="btn-primary btn-auto-width">Filter</button>
+        {% if is_filtered %}
           <a href="{{ url_for('expenses') }}" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">Clear</a>
         {% endif %}
       </div>
     </form>
 
     <div class="toolbar-right-action">
-      <button type="button" class="btn-action-primary" onclick="openModal('modal-transaction')">+ Log Expense</button>
+      <button type="button" class="btn-qa btn-qa-expense" onclick="openTransactionModal('expense')">+ Add Expense</button>
     </div>
   </div>
 
@@ -88,9 +107,9 @@
             <th>Date</th>
             <th>Description</th>
             <th>Category</th>
-            <th>Payment Mode</th>
+            <th>Payment Method</th>
             <th class="text-right">Amount</th>
-            <th class="text-right">Action</th>
+            <th class="text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -107,15 +126,29 @@
               <td><span class="tag-mode">{{ t.payment_mode or 'UPI' }}</span></td>
               <td class="text-right font-mono font-bold text-dark">-{{ format_money(t.amount) }}</td>
               <td class="text-right">
-                <form method="POST" action="{{ url_for('delete_transaction', txn_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Delete this expense record?');">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-                  <button type="submit" class="btn-delete-row" title="Delete record">&times;</button>
-                </form>
+                <div class="row-actions-group">
+                  <button type="button" class="btn-edit-row" data-id="{{ t.id }}" data-title="{{ t.title }}" data-category="{{ t.category }}" data-amount="{{ t.amount }}" data-type="expense" data-mode="{{ t.payment_mode or 'UPI' }}" data-account-id="{{ t.account_id or '' }}" data-date="{{ t.date }}" data-notes="{{ t.notes or '' }}" onclick="openEditTransactionModal(this)">Edit</button>
+                  <form method="POST" action="{{ url_for('delete_transaction', txn_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Delete this expense?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                    <button type="submit" class="btn-delete-row" title="Delete expense" aria-label="Delete expense">&times;</button>
+                  </form>
+                </div>
               </td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="6" class="empty-table-state">No matching expenses found for this query.</td>
+              <td colspan="6">
+                <div class="empty-state-box">
+                  <div class="empty-state-title">{% if is_filtered %}No expenses match your filters{% else %}No expenses recorded yet{% endif %}</div>
+                  <p class="empty-state-desc">{% if is_filtered %}Try clearing your filters or selecting another month.{% else %}Track every bill, grocery run, or purchase so you always know where your money goes.{% endif %}</p>
+                  <div class="empty-state-actions">
+                    {% if is_filtered %}
+                      <a href="{{ url_for('expenses') }}" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">Clear Filters</a>
+                    {% endif %}
+                    <button type="button" class="btn-qa btn-qa-expense" onclick="openTransactionModal('expense')">+ Add Expense</button>
+                  </div>
+                </div>
+              </td>
             </tr>
           {% endfor %}
         </tbody>
