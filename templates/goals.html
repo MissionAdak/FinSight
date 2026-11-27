@@ -406,8 +406,8 @@
     var amountEl = document.getElementById('contrib-amount');
     var warnEl = document.getElementById('contrib-balance-warning');
     var submitEl = document.getElementById('contrib-submit');
-    var rem = form ? parseFloat(form.dataset.remaining || '0') : 0;
-    var amt = amountEl ? parseFloat(amountEl.value) : 0;
+    var rem = form ? Number.parseFloat(form.dataset.remaining || '0') : 0;
+    var amt = amountEl ? Number.parseFloat(amountEl.value) : 0;
     if (Number.isFinite(amt) && amt > 0 && Number.isFinite(rem) && rem >= 0 && Math.round((amt - rem) * 100) > 0) {
       if (warnEl) {
         warnEl.textContent = 'This deposit exceeds the remaining goal target (' + formatClientMoney(rem) + ' left). Enter up to ' + formatClientMoney(rem) + '.';
@@ -451,7 +451,7 @@
     }
     var hintEl = document.getElementById('contrib-remaining-hint');
     if (hintEl && d.remaining) {
-      hintEl.textContent = 'Remaining to reach 100%: ' + formatClientMoney(parseFloat(d.remaining));
+      hintEl.textContent = 'Remaining to reach 100%: ' + formatClientMoney(Number.parseFloat(d.remaining));
     }
     document.getElementById('contributeModalTitle').textContent = 'Add Money to ' + (d.name || '');
     checkContributeBalance();

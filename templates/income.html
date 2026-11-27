@@ -8,43 +8,46 @@
   <div class="module-summary-grid">
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">
-          Total Income (Money In)
-          {% if is_filtered %}<span class="kpi-filtered-pill">Filtered</span>{% endif %}
-        </span>
+        <div>
+          <span class="kpi-label">This Month</span>
+          <div class="kpi-period-tag">This Month — {{ current_month_label }}</div>
+        </div>
         <span class="kpi-icon-pill icon-inflow">&#8593;</span>
       </div>
-      <div class="kpi-figure text-green font-mono">{{ format_money(total_income) }}</div>
+      <div class="kpi-figure text-green font-mono">{{ format_money(this_month_total) }}</div>
       <div class="kpi-sub">
-        <span>Across {{ transactions|length }} {{ 'income entry' if transactions|length == 1 else 'income entries' }} shown</span>
+        <span class="kpi-badge-neutral">{{ this_month_count }} {{ 'entry' if this_month_count == 1 else 'entries' }}</span>
+        <span>{{ month_delta.text }}</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">
-          Average Income
-          {% if is_filtered %}<span class="kpi-filtered-pill">Filtered</span>{% endif %}
-        </span>
-        <span class="kpi-icon-pill icon-budget">&#8764;</span>
+        <div>
+          <span class="kpi-label">This Year ({{ current_year_key }})</span>
+          <div class="kpi-period-tag">This Year — {{ current_year_key }}</div>
+        </div>
+        <span class="kpi-icon-pill icon-budget">Y</span>
       </div>
-      <div class="kpi-figure text-blue font-mono">{{ format_money(avg_income) }}</div>
+      <div class="kpi-figure text-blue font-mono">{{ format_money(this_year_total) }}</div>
       <div class="kpi-sub">
-        <span>Average per payment received</span>
+        <span>Avg {{ format_money(this_year_monthly_avg) }}/mo this year</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">
-          Top Income Source
-          {% if is_filtered %}<span class="kpi-filtered-pill">Filtered</span>{% endif %}
-        </span>
+        <div>
+          <span class="kpi-label">All-Time Total</span>
+          <div class="kpi-period-tag">All Time</div>
+        </div>
         <span class="kpi-icon-pill icon-savings">&#9670;</span>
       </div>
-      <div class="kpi-figure text-blue text-lg font-bold">{{ top_source }}</div>
+      <div class="kpi-figure text-green font-mono">{{ format_money(all_time_total) }}</div>
       <div class="kpi-sub">
-        <span>Your biggest source of income</span>
+        <span>{{ all_time_count }} total income entries</span>
+        <span>&bull;</span>
+        <a href="{{ url_for('history') }}" class="btn-text-link">View Full History &rarr;</a>
       </div>
     </div>
   </div>
@@ -57,17 +60,27 @@
       </div>
 
       <div class="filter-group-select">
+        <label for="income-year" class="sr-only">Filter by year</label>
+        <select id="income-year" name="year" class="field-input">
+          <option value="">All Years</option>
+          {% for yr in year_options %}
+            <option value="{{ yr }}" {% if selected_year == yr %}selected{% endif %}>{{ yr }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-group-select">
         <label for="income-month" class="sr-only">Filter by month</label>
         <select id="income-month" name="month" class="field-input">
-          <option value="">All Time</option>
-          {% for mo in month_options %}
+          <option value="">All Months</option>
+          {% for mo in month_num_options %}
             <option value="{{ mo.value }}" {% if selected_month == mo.value %}selected{% endif %}>{{ mo.label }}</option>
           {% endfor %}
         </select>
       </div>
 
       <div class="filter-group-select">
-        <label for="income-category" class="sr-only">Filter by category</label>
+        <label for="income-category" class="sr-only">Filter by source</label>
         <select id="income-category" name="category" class="field-input">
           <option value="">All Sources</option>
           {% for c in categories %}
@@ -79,7 +92,7 @@
       <div class="filter-group-select">
         <label for="income-mode" class="sr-only">Filter by payment method</label>
         <select id="income-mode" name="mode" class="field-input">
-          <option value="">All Payment Methods</option>
+          <option value="">All Methods</option>
           {% for m in payment_modes %}
             <option value="{{ m }}" {% if selected_mode == m %}selected{% endif %}>{{ m }}</option>
           {% endfor %}
@@ -99,6 +112,18 @@
     </div>
   </div>
 
+  {% if is_filtered %}
+    <div class="filtered-summary-strip">
+      <div class="filtered-summary-left">
+        <span class="kpi-filtered-pill">Filtered</span>
+        <span>Showing Filtered Results: <strong>{{ transactions|length }}</strong> {{ 'entry' if transactions|length == 1 else 'entries' }}</span>
+        <span class="hero-divider">|</span>
+        <span>Total: <strong class="font-mono text-green">{{ format_money(filtered_total) }}</strong></span>
+      </div>
+      <a href="{{ url_for('income') }}" class="btn-text-link">Clear Filters</a>
+    </div>
+  {% endif %}
+
   <div class="card-table-wrapper">
     <div class="table-responsive">
       <table class="fin-table">
@@ -115,7 +140,10 @@
         <tbody>
           {% for t in transactions %}
             <tr>
-              <td class="font-mono text-muted text-sm">{{ t.date }}</td>
+              <td class="font-mono text-muted text-sm">
+                {{ t.date }}
+                {% if t.date > today_iso %}<span class="badge-upcoming">Upcoming</span>{% endif %}
+              </td>
               <td>
                 <div class="cell-primary-title">{{ t.title }}</div>
                 {% if t.notes %}
@@ -140,7 +168,7 @@
               <td colspan="6">
                 <div class="empty-state-box">
                   <div class="empty-state-title">{% if is_filtered %}No income entries match your filters{% else %}No income recorded yet{% endif %}</div>
-                  <p class="empty-state-desc">{% if is_filtered %}Try clearing your filters or picking another month.{% else %}Add your salary, business sales, or side income to track how much money comes in.{% endif %}</p>
+                  <p class="empty-state-desc">{% if is_filtered %}Try clearing your filters or picking another year or month.{% else %}Add your salary, business sales, or side income to track how much money comes in.{% endif %}</p>
                   <div class="empty-state-actions">
                     {% if is_filtered %}
                       <a href="{{ url_for('income') }}" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">Clear Filters</a>

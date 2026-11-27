@@ -8,12 +8,17 @@
   <div class="reports-header-actions">
     <div>
       <h2 class="section-title">Your Financial Summary Report</h2>
-      <p class="section-subtitle">A clear summary of your income, spending, savings, and budgets as of {{ today_date }}.</p>
+      <p class="section-subtitle">Summary of your income, spending, savings, and budgets &bull; <span class="period-scope-pill">{{ period_label }}</span></p>
     </div>
     <div class="report-btn-group">
-      <a href="{{ url_for('export_csv') }}" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+      <nav class="period-toggle-pill" aria-label="Choose report time period">
+        <a href="{{ url_for('reports', period='month') }}" class="period-pill-btn {% if period == 'month' %}active{% endif %}">This Month</a>
+        <a href="{{ url_for('reports', period='year') }}" class="period-pill-btn {% if period == 'year' %}active{% endif %}">This Year</a>
+        <a href="{{ url_for('reports', period='all') }}" class="period-pill-btn {% if period == 'all' %}active{% endif %}">All Time</a>
+      </nav>
+      <a href="{{ url_for('export_csv', period=period, year=target_year, month=target_month) }}" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Download Spreadsheet (CSV)
+        Export CSV ({{ period_label }})
       </a>
       <button type="button" class="btn-primary btn-auto-width" onclick="window.print()" style="display:inline-flex; align-items:center; gap:6px;">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -28,37 +33,41 @@
         <span class="logo-symbol">&#9670;</span>
         <div>
           <div class="rep-company-name">FinSight Money Summary</div>
-          <div class="rep-subtext">Personal &amp; Business Financial Report</div>
+          <div class="rep-subtext">Report Period: {{ period_label }}</div>
         </div>
       </div>
       <div class="rep-brand-right">
         <div><strong>Account Holder:</strong> {{ current_user.business_name or current_user.fullname }}</div>
         <div><strong>Country / Currency:</strong> {{ current_user.country or 'India' }} / {{ currency_code }} ({{ currency_symbol }})</div>
-        <div><strong>Date:</strong> {{ today_date }}</div>
+        <div><strong>Generated On:</strong> {{ today_date }}</div>
       </div>
     </div>
 
     <div class="kpi-grid" style="margin: 24px 0;">
       <div class="kpi-card">
         <div class="kpi-label">Total Income (Money In)</div>
+        <div class="kpi-period-tag">{{ period_label }}</div>
         <div class="kpi-figure text-blue font-mono">{{ format_money(total_income) }}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Total Expenses (Money Spent)</div>
+        <div class="kpi-period-tag">{{ period_label }}</div>
         <div class="kpi-figure text-dark font-mono">{{ format_money(total_expense) }}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Money Saved</div>
+        <div class="kpi-period-tag">{{ period_label }}</div>
         <div class="kpi-figure {% if net_profit >= 0 %}text-green{% else %}text-danger{% endif %} font-mono">{{ format_money(net_profit) }}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Savings Rate</div>
+        <div class="kpi-period-tag">{{ period_label }}</div>
         <div class="kpi-figure text-blue font-mono">{{ operating_margin }}%</div>
       </div>
     </div>
 
     <div class="statement-table-wrapper">
-      <h3 class="statement-subtitle">Income &amp; Spending Breakdown</h3>
+      <h3 class="statement-subtitle">Income &amp; Spending Breakdown ({{ period_label }})</h3>
       <table class="statement-full-table">
         <thead>
           <tr>
@@ -100,7 +109,7 @@
     </div>
 
     <div class="statement-table-wrapper" style="margin-top: 32px;">
-      <h3 class="statement-subtitle">Budget Overview</h3>
+      <h3 class="statement-subtitle">Live Budget Overview</h3>
       <table class="statement-full-table">
         <thead>
           <tr>
@@ -133,9 +142,9 @@
 
     <div class="report-signoff-footer">
       <div class="signoff-note">
-        <strong>Summary Note:</strong> Automatically prepared by FinSight from your saved transactions and budgets.
+        <strong>Summary Note:</strong> Automatically prepared by FinSight from your actual transactions (excluding future-dated entries).
       </div>
-      <div class="signoff-badge">&#10003; Up to Date</div>
+      <div class="signoff-badge">&#10003; Live &amp; Reconciled</div>
     </div>
   </div>
 

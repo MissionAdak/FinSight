@@ -1,0 +1,410 @@
+{% extends "base_app.html" %}
+
+{% block title %}Financial History — FinSight{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header-row">
+    <div>
+      <h2 class="page-title">Financial History</h2>
+      <p class="page-subtitle">Review your All-Time lifetime totals, compare Year-by-Year performance, and inspect any Month in detail.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ url_for('export_csv', period='all') }}" class="btn-secondary">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export All-Time CSV</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <div>
+          <span class="kpi-title">All-Time Income</span>
+          <div class="kpi-period-tag">All Time</div>
+        </div>
+        <div class="kpi-icon-wrap icon-blue">&#8593;</div>
+      </div>
+      <div class="kpi-value font-mono text-blue">{{ format_money(all_time_income) }}</div>
+      <div class="kpi-footer">
+        <span class="kpi-meta">Total money earned across all recorded years</span>
+      </div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <div>
+          <span class="kpi-title">All-Time Expenses</span>
+          <div class="kpi-period-tag">All Time</div>
+        </div>
+        <div class="kpi-icon-wrap icon-amber">&#8595;</div>
+      </div>
+      <div class="kpi-value font-mono text-dark">{{ format_money(all_time_expense) }}</div>
+      <div class="kpi-footer">
+        <span class="kpi-meta">Total money spent across all recorded years</span>
+      </div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <div>
+          <span class="kpi-title">All-Time Net Savings</span>
+          <div class="kpi-period-tag">All Time</div>
+        </div>
+        <div class="kpi-icon-wrap {% if all_time_savings >= 0 %}icon-green{% else %}icon-red{% endif %}">&#9670;</div>
+      </div>
+      <div class="kpi-value font-mono {% if all_time_savings >= 0 %}text-green{% else %}text-danger{% endif %}">{{ format_money(all_time_savings) }}</div>
+      <div class="kpi-footer">
+        <span class="kpi-badge {% if all_time_rate >= 0 %}badge-success{% else %}badge-danger{% endif %} font-mono">{{ all_time_rate }}% Lifetime Rate</span>
+      </div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <div>
+          <span class="kpi-title">Years Tracked</span>
+          <div class="kpi-period-tag">{{ years_count }} {{ 'Year' if years_count == 1 else 'Years' }}</div>
+        </div>
+        <div class="kpi-icon-wrap icon-purple">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value font-mono">{{ years_span_label }}</div>
+      <div class="kpi-footer">
+        {% if best_saving_year %}
+          <span class="kpi-badge badge-info">Best Saving Year: {{ best_saving_year.year }}</span>
+        {% else %}
+          <span class="kpi-meta">No completed years yet</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="section-header-row">
+    <div>
+      <h3 class="section-heading">Year-by-Year Breakdown</h3>
+      <p class="page-subtitle">Click any year card to inspect all 12 months of that year below.</p>
+    </div>
+    <span class="section-meta">{{ year_cards|length }} {{ 'Year' if year_cards|length == 1 else 'Years' }} Available</span>
+  </div>
+
+  <div class="history-years-grid">
+    {% for y in year_cards %}
+      <a href="{{ url_for('history', year=y.year) }}" class="history-year-card {% if y.year == selected_year %}active{% endif %}">
+        <div class="year-card-top">
+          <span class="year-card-title font-mono">{{ y.year }}</span>
+          <span class="year-card-badge {% if y.year == selected_year %}badge-year-active{% endif %}">
+            {% if y.year == selected_year %}Viewing{% else %}{{ y.count }} entries{% endif %}
+          </span>
+        </div>
+        <div class="year-card-metrics">
+          <div class="year-metric-row">
+            <span class="text-muted">Income</span>
+            <strong class="font-mono text-blue">{{ format_money(y.income) }}</strong>
+          </div>
+          <div class="year-metric-row">
+            <span class="text-muted">Expenses</span>
+            <strong class="font-mono text-dark">{{ format_money(y.expense) }}</strong>
+          </div>
+          <div class="year-metric-row year-metric-highlight">
+            <span class="text-muted">Net Savings</span>
+            <strong class="font-mono {% if y.savings >= 0 %}text-green{% else %}text-danger{% endif %}">{{ format_money(y.savings) }}</strong>
+          </div>
+        </div>
+        <div class="year-card-footer">
+          <span class="kpi-badge {% if y.savings_rate >= 0 %}badge-success{% else %}badge-danger{% endif %} font-mono">{{ y.savings_rate }}% Saved</span>
+          <span class="text-xs text-muted">Inspect months &rarr;</span>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <h3 class="chart-title">Year-over-Year Comparison (Income vs. Expenses)</h3>
+        <p class="chart-subtitle">Annual money in vs. annual money spent across all recorded years</p>
+      </div>
+      <div class="chart-legend-row">
+        <span class="legend-indicator dot-blue"></span> Annual Income
+        <span class="legend-indicator dot-orange ml-3"></span> Annual Expenses
+      </div>
+    </div>
+    <div class="line-chart-container" style="height: 270px;">
+      <canvas id="yoyBarChart" data-labels="{{ yoy_labels|tojson|forceescape }}" data-income="{{ yoy_income|tojson|forceescape }}" data-expense="{{ yoy_expense|tojson|forceescape }}" data-currency="{{ currency_symbol }}"></canvas>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-card-header">
+      <div>
+        <h3 class="table-card-title">Monthly Breakdown for {{ selected_year }}</h3>
+        <p class="chart-subtitle">All 12 months (January – December {{ selected_year }}). Click "View Details" on any month to inspect its exact transactions.</p>
+      </div>
+      <div class="page-actions">
+        <form method="GET" action="{{ url_for('history') }}" class="budget-picker-form">
+          <label for="history-year-select" class="picker-label">Year:</label>
+          <select id="history-year-select" name="year" class="field-input picker-select" onchange="this.form.submit()">
+            {% for y in year_cards %}
+              <option value="{{ y.year }}" {% if y.year == selected_year %}selected{% endif %}>{{ y.year }}</option>
+            {% endfor %}
+          </select>
+        </form>
+        <a href="{{ url_for('export_csv', period='year', year=selected_year) }}" class="btn-secondary">
+          Export {{ selected_year }} CSV
+        </a>
+      </div>
+    </div>
+
+    <div class="line-chart-container" style="height: 290px; margin-bottom: 24px;">
+      <canvas id="yearMonthlyChart" data-labels="{{ m_labels|tojson|forceescape }}" data-income="{{ m_income|tojson|forceescape }}" data-expense="{{ m_expense|tojson|forceescape }}" data-savings="{{ m_savings|tojson|forceescape }}" data-currency="{{ currency_symbol }}"></canvas>
+    </div>
+
+    <div class="table-responsive">
+      <table class="fin-table">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th class="text-right">Income</th>
+            <th class="text-right">Expenses</th>
+            <th class="text-right">Net Savings</th>
+            <th class="text-right">Savings Rate</th>
+            <th class="text-right">Entries</th>
+            <th class="text-right">Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in monthly_rows %}
+            <tr>
+              <td>
+                <strong>{{ r.month_label }}</strong>
+                {% if r.is_current %}<span class="badge-current-month">Current</span>{% endif %}
+              </td>
+              <td class="text-right font-mono text-blue font-bold">{{ format_money(r.income) }}</td>
+              <td class="text-right font-mono text-dark">{{ format_money(r.expense) }}</td>
+              <td class="text-right font-mono font-bold {% if r.savings >= 0 %}text-green{% else %}text-danger{% endif %}">{{ format_money(r.savings) }}</td>
+              <td class="text-right font-mono">
+                <span class="kpi-badge {% if r.income == 0 %}badge-info{% elif r.savings_rate >= 0 %}badge-success{% else %}badge-danger{% endif %}">{{ r.savings_rate }}%</span>
+              </td>
+              <td class="text-right font-mono text-muted">{{ r.count }}</td>
+              <td class="text-right">
+                <button type="button" class="btn-edit-row" data-month-key="{{ r.month_key }}" onclick="toggleMonthDetail(this)">
+                  View Details ({{ r.txns|length }})
+                </button>
+              </td>
+            </tr>
+            <tr id="detail-row-{{ r.month_key }}" class="history-month-detail-row">
+              <td colspan="7">
+                <div class="history-detail-box">
+                  <div class="history-detail-header">
+                    <strong>Transactions in {{ r.month_label }}</strong>
+                    <div class="header-action-links">
+                      <a href="{{ url_for('expenses', year=selected_year, month=r.month_num) }}" class="btn-subtle">Filter in Expenses</a>
+                      <a href="{{ url_for('income', year=selected_year, month=r.month_num) }}" class="btn-subtle">Filter in Income</a>
+                    </div>
+                  </div>
+                  {% if r.txns %}
+                    <div class="table-responsive">
+                      <table class="history-mini-table">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th>Type</th>
+                            <th>Method</th>
+                            <th class="text-right">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for t in r.txns %}
+                            <tr>
+                              <td class="font-mono text-muted text-sm">
+                                {{ t.date }}
+                                {% if t.date > today_iso %}<span class="badge-upcoming">Upcoming</span>{% endif %}
+                              </td>
+                              <td>
+                                <strong>{{ t.title }}</strong>
+                                {% if t.notes %}<div class="cell-sub-note">{{ t.notes }}</div>{% endif %}
+                              </td>
+                              <td><span class="tag-category">{{ t.category }}</span></td>
+                              <td>
+                                {% if t.txn_type == 'income' %}
+                                  <span class="badge-type badge-income">&#8593; Income</span>
+                                {% else %}
+                                  <span class="badge-type badge-expense">&#8595; Expense</span>
+                                {% endif %}
+                              </td>
+                              <td><span class="tag-mode">{{ t.payment_mode or 'UPI' }}</span></td>
+                              <td class="text-right font-mono font-bold {% if t.txn_type == 'income' %}text-green{% else %}text-dark{% endif %}">
+                                {% if t.txn_type == 'income' %}+{% else %}-{% endif %}{{ format_money(t.amount) }}
+                              </td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  {% else %}
+                    <div class="empty-history-note">No transactions recorded in {{ r.month_label }}.</div>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function toggleMonthDetail(btn) {
+    var key = btn.dataset.monthKey;
+    var row = document.getElementById('detail-row-' + key);
+    if (!row) return;
+    var isOpen = row.classList.toggle('open');
+    btn.classList.toggle('active-toggle', isOpen);
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var isDark = document.documentElement.dataset.theme === 'dark';
+    var gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    var textColor = isDark ? '#94a3b8' : '#64748b';
+
+    var yoyCtx = document.getElementById('yoyBarChart');
+    if (yoyCtx) {
+      var yLabels = JSON.parse(yoyCtx.dataset.labels || '[]');
+      var yIncome = JSON.parse(yoyCtx.dataset.income || '[]');
+      var yExpense = JSON.parse(yoyCtx.dataset.expense || '[]');
+      var yCurr = yoyCtx.dataset.currency || '';
+
+      new Chart(yoyCtx, {
+        type: 'bar',
+        data: {
+          labels: yLabels,
+          datasets: [
+            {
+              label: 'Annual Income',
+              data: yIncome,
+              backgroundColor: '#1a56db',
+              borderRadius: 6
+            },
+            {
+              label: 'Annual Expenses',
+              data: yExpense,
+              backgroundColor: '#f97316',
+              borderRadius: 6
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  return ' ' + ctx.dataset.label + ': ' + yCurr + Number(ctx.parsed.y).toLocaleString(undefined, {minimumFractionDigits: 2});
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: textColor }
+            },
+            y: {
+              grid: { color: gridColor },
+              ticks: {
+                color: textColor,
+                callback: function(v) { return yCurr + Number(v).toLocaleString(); }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    var moCtx = document.getElementById('yearMonthlyChart');
+    if (moCtx) {
+      var mLabels = JSON.parse(moCtx.dataset.labels || '[]');
+      var mIncome = JSON.parse(moCtx.dataset.income || '[]');
+      var mExpense = JSON.parse(moCtx.dataset.expense || '[]');
+      var mSavings = JSON.parse(moCtx.dataset.savings || '[]');
+      var mCurr = moCtx.dataset.currency || '';
+
+      new Chart(moCtx, {
+        type: 'bar',
+        data: {
+          labels: mLabels,
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Income',
+              data: mIncome,
+              backgroundColor: 'rgba(26, 86, 219, 0.85)',
+              borderRadius: 4
+            },
+            {
+              type: 'bar',
+              label: 'Expenses',
+              data: mExpense,
+              backgroundColor: 'rgba(249, 115, 22, 0.85)',
+              borderRadius: 4
+            },
+            {
+              type: 'line',
+              label: 'Net Savings',
+              data: mSavings,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.12)',
+              borderWidth: 2.5,
+              tension: 0.35,
+              pointRadius: 3.5,
+              pointBackgroundColor: '#10b981',
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: { color: textColor }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  return ' ' + ctx.dataset.label + ': ' + mCurr + Number(ctx.parsed.y).toLocaleString(undefined, {minimumFractionDigits: 2});
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: textColor }
+            },
+            y: {
+              grid: { color: gridColor },
+              ticks: {
+                color: textColor,
+                callback: function(v) { return mCurr + Number(v).toLocaleString(); }
+              }
+            }
+          }
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}

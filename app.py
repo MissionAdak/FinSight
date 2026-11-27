@@ -29,6 +29,10 @@ failed_login_attempts = {}
 PAY_CREDIT_CARD = 'Credit Card'
 PAY_BANK_TRANSFER = 'Bank Transfer'
 ASSET_MUTUAL_FUND = 'Mutual Fund'
+CAT_SAVINGS_GOALS = 'Savings & Goals'
+FMT_MONTH_LABEL = '%b %Y'
+RE_YEAR_MONTH = r'^\d{4}-\d{2}$'
+RE_YEAR_ONLY = r'^\d{4}$'
 ERR_GOAL_NOT_FOUND = 'Financial goal not found or unauthorized access.'
 ERR_INV_NOT_FOUND = 'Investment holding not found or unauthorized access.'
 TPL_LOGIN = 'login.html'
@@ -41,7 +45,7 @@ CHART_PALETTE = [
 DEFAULT_EXPENSE_CATEGORIES = [
     'Food & Dining', 'Groceries', 'Housing & Rent', 'Transportation',
     'Utilities', 'Shopping', 'Entertainment', 'Healthcare',
-    'Savings & Goals', 'Other'
+    CAT_SAVINGS_GOALS, 'Other'
 ]
 DEFAULT_INCOME_CATEGORIES = [
     'Salary', 'Freelance / Consulting', 'Business Sales',
@@ -53,6 +57,111 @@ VALID_TXN_TYPES = ('income', 'expense')
 VALID_ASSET_TYPES = ('Equity', ASSET_MUTUAL_FUND, 'ETF', 'Debt', 'Bond', 'Gold', 'Cash', 'Other')
 VALID_GOAL_TYPES = ('Home', 'Retirement', 'Travel', 'Education', 'Emergency', 'Major Purchase', 'Other')
 PUBLIC_SIGNUP_ROLES = ('user', 'shop_owner')
+MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+]
+MONTH_SHORT_NAMES = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+]
+
+
+def get_period_keys():
+    now = datetime.now()
+    pm_year = now.year if now.month > 1 else now.year - 1
+    pm_month = now.month - 1 if now.month > 1 else 12
+    cur_m = f'{now.year:04d}-{now.month:02d}'
+    prev_m = f'{pm_year:04d}-{pm_month:02d}'
+    cur_y = f'{now.year:04d}'
+    prev_y = f'{now.year - 1:04d}'
+    return {
+        'now': now,
+        'today_str': now.strftime('%Y-%m-%d'),
+        'current_month_key': cur_m,
+        'current_year_key': cur_y,
+        'prev_month_key': prev_m,
+        'prev_year_key': prev_y,
+        'current_month_label': datetime(now.year, now.month, 1).strftime(FMT_MONTH_LABEL),
+        'prev_month_label': datetime(pm_year, pm_month, 1).strftime(FMT_MONTH_LABEL)
+    }
+
+
+def is_future_txn(txn, today_str=None):
+    cutoff = today_str or datetime.now().strftime('%Y-%m-%d')
+    return bool(txn.date and txn.date > cutoff)
+
+
+def compute_budget_spent(user_id, budget, month_key=None, year_key=None, today_str=None):
+    keys = get_period_keys()
+    m_key = month_key or keys['current_month_key']
+    y_key = year_key or keys['current_year_key']
+    cutoff = today_str or keys['today_str']
+    prefix = y_key if budget.period == 'Yearly' else m_key
+
+    total = db.session.query(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(
+        Transaction.user_id == user_id,
+        Transaction.txn_type == 'expense',
+        func.lower(Transaction.category) == budget.name.strip().lower(),
+        Transaction.date.like(f'{prefix}%'),
+        Transaction.date <= cutoff
+    ).scalar()
+    return round(float(total or 0.0), 2)
+
+
+def build_live_budget_item(budget, spent):
+    allocated = round(float(budget.allocated or 0.0), 2)
+    spent_val = round(float(spent or 0.0), 2)
+    pct = round((spent_val / allocated) * 100, 1) if allocated > 0 else 0.0
+    remaining = round(allocated - spent_val, 2)
+    thresh = budget.alert_threshold or 80
+    if pct > 100:
+        status, status_class = 'Over Budget', 'status-danger'
+    elif pct >= thresh:
+        status, status_class = 'Near Limit', 'status-warning'
+    else:
+        status, status_class = 'Healthy', 'status-success'
+    return {
+        'id': budget.id,
+        'name': budget.name,
+        'allocated': allocated,
+        'spent': spent_val,
+        'period': budget.period,
+        'alert_threshold': thresh,
+        'percentage': pct,
+        'remaining': remaining,
+        'status': status,
+        'status_class': status_class,
+        'is_alert': pct >= thresh,
+        'is_over': pct > 100
+    }
+
+
+def compute_pct_change(current_val, prev_val, prev_label):
+    if prev_val > 0:
+        delta = round(((current_val - prev_val) / prev_val) * 100, 1)
+        sign = '+' if delta >= 0 else ''
+        return {
+            'pct': delta,
+            'text': f'{sign}{delta}% vs {prev_label}',
+            'has_prev': True,
+            'is_positive': delta >= 0
+        }
+    return {
+        'pct': None,
+        'text': f'No prior data ({prev_label})',
+        'has_prev': False,
+        'is_positive': True
+    }
+
+
+def sync_budget_spent_cache(user_id, category):
+    matched = BudgetCategory.query.filter(
+        BudgetCategory.user_id == user_id,
+        func.lower(BudgetCategory.name) == category.strip().lower()
+    ).all()
+    for b in matched:
+        b.spent = compute_budget_spent(user_id, b)
 
 CURRENCIES = {
     'USD': {'code': 'USD', 'symbol': '$', 'name': 'US Dollar'},
@@ -181,19 +290,21 @@ def csrf_protect():
 
 
 def _collect_budget_alerts(user):
+    keys = get_period_keys()
     alerts = []
     for b in user.budgets:
-        pct = (b.spent / b.allocated * 100) if b.allocated > 0 else 0
-        thresh = b.alert_threshold or 80
-        if pct >= thresh:
+        live_spent = compute_budget_spent(user.id, b, keys['current_month_key'], keys['current_year_key'], keys['today_str'])
+        item = build_live_budget_item(b, live_spent)
+        if item['is_alert']:
             alerts.append({
-                'id': b.id,
-                'category': b.name,
-                'spent': b.spent,
-                'allocated': b.allocated,
-                'pct': round(pct, 1),
-                'is_over': pct > 100,
-                'thresh': thresh
+                'id': item['id'],
+                'category': item['name'],
+                'period': item['period'],
+                'spent': item['spent'],
+                'allocated': item['allocated'],
+                'pct': item['percentage'],
+                'is_over': item['is_over'],
+                'thresh': item['alert_threshold']
             })
     return alerts
 
@@ -247,17 +358,31 @@ def _collect_goal_alerts(user):
 
 
 def _compute_sidebar_summary(user):
-    now_prefix = datetime.now().strftime('%Y-%m')
-    m_in = sum(t.amount for t in user.transactions if t.txn_type == 'income' and t.date.startswith(now_prefix))
-    m_out = sum(t.amount for t in user.transactions if t.txn_type == 'expense' and t.date.startswith(now_prefix))
-    tot_alloc = sum(b.allocated for b in user.budgets if b.period == 'Monthly')
-    tot_sp = sum(b.spent for b in user.budgets if b.period == 'Monthly')
+    keys = get_period_keys()
+    now_prefix = keys['current_month_key']
+    cutoff = keys['today_str']
+    m_in = round(sum(
+        t.amount for t in user.transactions
+        if t.txn_type == 'income' and t.date and t.date.startswith(now_prefix) and t.date <= cutoff
+    ), 2)
+    m_out = round(sum(
+        t.amount for t in user.transactions
+        if t.txn_type == 'expense' and t.date and t.date.startswith(now_prefix) and t.date <= cutoff
+    ), 2)
+    monthly_budgets = [b for b in user.budgets if b.period == 'Monthly']
+    tot_alloc = round(sum(b.allocated for b in monthly_budgets), 2)
+    tot_sp = round(sum(
+        compute_budget_spent(user.id, b, now_prefix, keys['current_year_key'], cutoff)
+        for b in monthly_budgets
+    ), 2)
     b_pct = round((tot_sp / tot_alloc * 100), 1) if tot_alloc > 0 else 0.0
     return {
+        'month_label': keys['current_month_label'],
         'income': m_in,
         'expense': m_out,
-        'savings': m_in - m_out,
+        'savings': round(m_in - m_out, 2),
         'budget_pct': min(b_pct, 100.0),
+        'raw_budget_pct': b_pct,
         'allocated': tot_alloc,
         'spent': tot_sp
     }
@@ -292,10 +417,12 @@ def inject_global_context():
     investment_alerts = []
     goal_alerts = []
     sidebar_summary = {
+        'month_label': get_period_keys()['current_month_label'],
         'income': 0.0,
         'expense': 0.0,
         'savings': 0.0,
         'budget_pct': 0.0,
+        'raw_budget_pct': 0.0,
         'allocated': 0.0,
         'spent': 0.0
     }
@@ -399,85 +526,140 @@ def get_last_6_months():
             month += 12
             year -= 1
         key = f"{year:04d}-{month:02d}"
-        label = datetime(year, month, 1).strftime('%b %Y')
+        label = datetime(year, month, 1).strftime(FMT_MONTH_LABEL)
         short_label = datetime(year, month, 1).strftime('%b')
         months.append({'key': key, 'label': label, 'short_label': short_label})
     return months
 
 
+def get_multi_year_months():
+    now = datetime.now()
+    months = []
+    for yr in (now.year - 1, now.year):
+        end_m = 12 if yr < now.year else now.month
+        for mo in range(1, end_m + 1):
+            key = f'{yr:04d}-{mo:02d}'
+            label = datetime(yr, mo, 1).strftime(FMT_MONTH_LABEL)
+            short_label = datetime(yr, mo, 1).strftime('%b')
+            months.append({
+                'key': key,
+                'year': yr,
+                'month': mo,
+                'label': label,
+                'short_label': short_label
+            })
+    return months
+
+
+def _clamp_seed_day(mo_key, day):
+    now = datetime.now()
+    cur_key = now.strftime('%Y-%m')
+    d = min(day, now.day) if mo_key == cur_key else day
+    return f'{mo_key}-{max(d, 1):02d}'
+
+
+def _build_admin_month_txns(user, m, idx, primary_acc, credit_acc, wallet_acc):
+    mo_key = m['key']
+    factor = 0.78 + ((idx % 12) * 0.025) + (0.08 if m['year'] == datetime.now().year else 0.0)
+    txns = [
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='Enterprise Platform Licensing', category='Platform Revenue', amount=round(1850000.0 * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 5), status='Completed', notes=f"{m['label']} Corporate SaaS invoicing"),
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='Merchant Processing Volume Fees', category='Transaction Fees', amount=round(784500.0 * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 15), status='Completed', notes=f"{m['label']} Network settlement"),
+        Transaction(user_id=user.id, account_id=credit_acc.id, title='AWS Cloud Hosting Infrastructure', category='Cloud Infrastructure & SaaS', amount=round(245000.0 * factor, 2), txn_type='expense', payment_mode=PAY_CREDIT_CARD, date=_clamp_seed_day(mo_key, 10), status='Completed', notes=f"{m['label']} Cloud & DB servers"),
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='Engineering & Dev Payroll', category='Platform Engineering & Payroll', amount=round(650000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 24), status='Completed', notes=f"{m['label']} Monthly payroll"),
+        Transaction(user_id=user.id, account_id=wallet_acc.id, title='Security Compliance Audit Review', category='Regulatory & Security Compliance', amount=round(165000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 18), status='Completed', notes=f"{m['label']} Compliance review")
+    ]
+    if m['month'] in (4, 10):
+        txns.append(
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Datacenter Server Upgrade', category='Annual Datacenter Hardware Cap', amount=round(1450000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 12), status='Completed', notes=f"{m['label']} Hardware expansion")
+        )
+    return txns
+
+
+def _build_shop_month_txns(user, m, idx, primary_acc, wallet_acc):
+    mo_key = m['key']
+    factor = 0.80 + ((idx % 12) * 0.022) + (0.07 if m['year'] == datetime.now().year else 0.0)
+    txns = [
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='Storefront Register Settlement', category='Retail Sales', amount=round(468000.0 * factor, 2), txn_type='income', payment_mode='UPI', date=_clamp_seed_day(mo_key, 4), status='Completed', notes=f"{m['label']} Counter POS sales"),
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='Online Delivery Marketplace Sales', category='E-Commerce', amount=round(184000.0 * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 16), status='Completed', notes=f"{m['label']} Online orders payout"),
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='FMCG Goods Wholesale Delivery', category='Inventory Restock & Wholesale', amount=round(215000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 8), status='Completed', notes=f"{m['label']} Supplier invoice"),
+        Transaction(user_id=user.id, account_id=wallet_acc.id, title='Store Lease & Electricity Bill', category='Storefront Lease & Utilities', amount=round(82000.0 * factor, 2), txn_type='expense', payment_mode='UPI', date=_clamp_seed_day(mo_key, 12), status='Completed', notes=f"{m['label']} Rent and utility bill"),
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='Floor Associates Wages', category='Retail Staff Wages & Overtime', amount=round(118000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 22), status='Completed', notes=f"{m['label']} Staff wages")
+    ]
+    if m['month'] in (3, 9):
+        txns.append(
+            Transaction(user_id=user.id, account_id=primary_acc.id, title='Storefront Display & Lighting Refresh', category='Storefront Annual Renovation', amount=round(420000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 14), status='Completed', notes=f"{m['label']} Annual store upgrade")
+        )
+    return txns
+
+
+def _build_personal_month_txns(user, m, idx, primary_acc, credit_acc, wallet_acc):
+    base_income = (user.total_income / 12.0) if (user.total_income and user.total_income > 0) else 85000.0
+    mo_key = m['key']
+    factor = 0.84 + ((idx % 12) * 0.015) + (0.06 if m['year'] == datetime.now().year else 0.0)
+    txns = [
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='Primary Monthly Salary', category='Salary', amount=round(base_income * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 1), status='Completed', notes=f"{m['label']} Monthly salary deposit"),
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='Advisory Consulting Retainer', category='Freelance / Consulting', amount=round(base_income * 0.22 * factor, 2), txn_type='income', payment_mode='UPI', date=_clamp_seed_day(mo_key, 14), status='Completed', notes=f"{m['label']} Consulting payment"),
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='Apartment Monthly Rent', category='Housing & Rent / EMI', amount=round(base_income * 0.29, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 3), status='Completed', notes=f"{m['label']} Monthly rent payment"),
+        Transaction(user_id=user.id, account_id=credit_acc.id, title='Supermarket & Household Supplies', category='Groceries & Household Goods', amount=round(base_income * 0.14 * factor, 2), txn_type='expense', payment_mode=PAY_CREDIT_CARD, date=_clamp_seed_day(mo_key, 10), status='Completed', notes=f"{m['label']} Groceries and essentials"),
+        Transaction(user_id=user.id, account_id=wallet_acc.id, title='Fiber Internet & Mobile Plan', category='Utilities, Mobile & Internet', amount=round(base_income * 0.06, 2), txn_type='expense', payment_mode='UPI', date=_clamp_seed_day(mo_key, 16), status='Completed', notes=f"{m['label']} Monthly bills"),
+        Transaction(user_id=user.id, account_id=wallet_acc.id, title='Fuel & Daily Commute', category='Transportation & Auto Fuel', amount=round(base_income * 0.08 * factor, 2), txn_type='expense', payment_mode='UPI', date=_clamp_seed_day(mo_key, 19), status='Completed', notes=f"{m['label']} Commute and fuel"),
+        Transaction(user_id=user.id, account_id=primary_acc.id, title='Index Fund Monthly SIP', category='Savings, SIPs & Mutual Funds', amount=round(base_income * 0.20, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=_clamp_seed_day(mo_key, 21), status='Completed', notes=f"{m['label']} Mutual fund SIP")
+    ]
+    if m['month'] in (5, 10):
+        txns.append(
+            Transaction(user_id=user.id, account_id=credit_acc.id, title='Family Trip Flights & Hotel', category='Annual Vacation & Travel Fund', amount=round(base_income * 0.52, 2), txn_type='expense', payment_mode=PAY_CREDIT_CARD, date=_clamp_seed_day(mo_key, 12), status='Completed', notes=f"{m['label']} Annual holiday booking")
+        )
+    return txns
+
+
 def _seed_admin_ledger(user, months, primary_acc, credit_acc, wallet_acc):
     budgets = [
-        BudgetCategory(user_id=user.id, name='Cloud Infrastructure & SaaS', allocated=450000.0, spent=392000.0, period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='Platform Engineering & Payroll', allocated=850000.0, spent=814000.0, period='Monthly', alert_threshold=85),
-        BudgetCategory(user_id=user.id, name='Regulatory & Security Compliance', allocated=250000.0, spent=175000.0, period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='Enterprise Merchant Acquisition', allocated=350000.0, spent=368000.0, period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='Corporate Facilities & Utilities', allocated=300000.0, spent=221000.0, period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='Annual Datacenter Hardware Cap', allocated=4500000.0, spent=3200000.0, period='Yearly', alert_threshold=75)
+        BudgetCategory(user_id=user.id, name='Cloud Infrastructure & SaaS', allocated=450000.0, spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Platform Engineering & Payroll', allocated=850000.0, spent=0.0, period='Monthly', alert_threshold=85),
+        BudgetCategory(user_id=user.id, name='Regulatory & Security Compliance', allocated=250000.0, spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Enterprise Merchant Acquisition', allocated=350000.0, spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Corporate Facilities & Utilities', allocated=300000.0, spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Annual Datacenter Hardware Cap', allocated=4500000.0, spent=0.0, period='Yearly', alert_threshold=75)
     ]
     txns = []
     for idx, m in enumerate(months):
-        mo_key = m['key']
-        factor = 0.82 + (idx * 0.035)
-        txns.extend([
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='Enterprise Platform Licensing', category='Platform Revenue', amount=round(1850000.0 * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-05", status='Completed', notes=f"{m['label']} Corporate SaaS Invoicing"),
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='Merchant Processing Volume Fees', category='Transaction Fees', amount=round(784500.0 * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-15", status='Completed', notes=f"{m['label']} Network interchange settlement"),
-            Transaction(user_id=user.id, account_id=credit_acc.id, title='AWS Cloud Hosting Infrastructure', category='Cloud Infrastructure & SaaS', amount=round(245000.0 * factor, 2), txn_type='expense', payment_mode=PAY_CREDIT_CARD, date=f"{mo_key}-10", status='Completed', notes=f"{m['label']} CDN & DB cluster nodes"),
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='Engineering & Dev Payroll', category='Platform Engineering & Payroll', amount=round(650000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-28", status='Completed', notes=f"{m['label']} Automated payroll cycle"),
-            Transaction(user_id=user.id, account_id=wallet_acc.id, title='Security Compliance Audit Review', category='Regulatory & Security Compliance', amount=round(175000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-22", status='Completed', notes=f"{m['label']} Attestation & certification")
-        ])
+        txns.extend(_build_admin_month_txns(user, m, idx, primary_acc, credit_acc, wallet_acc))
     return budgets, txns
 
 
 def _seed_shop_ledger(user, months, primary_acc, wallet_acc):
     budgets = [
-        BudgetCategory(user_id=user.id, name='Inventory Restock & Wholesale', allocated=380000.0, spent=345000.0, period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='Storefront Lease & Utilities', allocated=120000.0, spent=118000.0, period='Monthly', alert_threshold=85),
-        BudgetCategory(user_id=user.id, name='Retail Staff Wages & Overtime', allocated=160000.0, spent=149000.0, period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='POS Terminals & Merchant Fees', allocated=65000.0, spent=68500.0, period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='Local Promotional Campaigns', allocated=50000.0, spent=39500.0, period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='Storefront Annual Renovation', allocated=1500000.0, spent=920000.0, period='Yearly', alert_threshold=70)
+        BudgetCategory(user_id=user.id, name='Inventory Restock & Wholesale', allocated=380000.0, spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Storefront Lease & Utilities', allocated=120000.0, spent=0.0, period='Monthly', alert_threshold=85),
+        BudgetCategory(user_id=user.id, name='Retail Staff Wages & Overtime', allocated=160000.0, spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='POS Terminals & Merchant Fees', allocated=65000.0, spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Local Promotional Campaigns', allocated=50000.0, spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Storefront Annual Renovation', allocated=1500000.0, spent=0.0, period='Yearly', alert_threshold=70)
     ]
     txns = []
     for idx, m in enumerate(months):
-        mo_key = m['key']
-        factor = 0.85 + (idx * 0.03)
-        txns.extend([
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='Storefront Register Settlement', category='Retail Sales', amount=round(468000.0 * factor, 2), txn_type='income', payment_mode='UPI', date=f"{mo_key}-04", status='Completed', notes=f"{m['label']} Counter POS batches"),
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='Online Delivery Marketplace Sales', category='E-Commerce', amount=round(184000.0 * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-18", status='Completed', notes=f"{m['label']} Partner fulfillment payouts"),
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='FMCG Goods Wholesale Delivery', category='Inventory Restock & Wholesale', amount=round(215000.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-08", status='Completed', notes=f"{m['label']} Supplier batch invoice"),
-            Transaction(user_id=user.id, account_id=wallet_acc.id, title='Store Electricity & Cold Storage', category='Storefront Lease & Utilities', amount=round(34000.0 * factor, 2), txn_type='expense', payment_mode='UPI', date=f"{mo_key}-14", status='Completed', notes=f"{m['label']} Utility provider bill"),
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='Floor Associates Wages', category='Retail Staff Wages & Overtime', amount=round(74500.0 * factor, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-26", status='Completed', notes=f"{m['label']} Staff bi-weekly payroll")
-        ])
+        txns.extend(_build_shop_month_txns(user, m, idx, primary_acc, wallet_acc))
     return budgets, txns
 
 
 def _seed_personal_ledger(user, months, primary_acc, credit_acc, wallet_acc):
     base_income = (user.total_income / 12.0) if (user.total_income and user.total_income > 0) else 85000.0
     budgets = [
-        BudgetCategory(user_id=user.id, name='Housing & Rent / EMI', allocated=round(base_income * 0.32, 0), spent=round(base_income * 0.32, 0), period='Monthly', alert_threshold=85),
-        BudgetCategory(user_id=user.id, name='Groceries & Household Goods', allocated=round(base_income * 0.18, 0), spent=round(base_income * 0.15, 0), period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='Utilities, Mobile & Internet', allocated=round(base_income * 0.08, 0), spent=round(base_income * 0.07, 0), period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='Transportation & Auto Fuel', allocated=round(base_income * 0.10, 0), spent=round(base_income * 0.11, 0), period='Monthly', alert_threshold=80),
-        BudgetCategory(user_id=user.id, name='Savings, SIPs & Mutual Funds', allocated=round(base_income * 0.25, 0), spent=round(base_income * 0.22, 0), period='Monthly', alert_threshold=90),
-        BudgetCategory(user_id=user.id, name='Annual Vacation & Travel Fund', allocated=round(base_income * 1.5, 0), spent=round(base_income * 1.1, 0), period='Yearly', alert_threshold=75)
+        BudgetCategory(user_id=user.id, name='Housing & Rent / EMI', allocated=round(base_income * 0.32, 0), spent=0.0, period='Monthly', alert_threshold=85),
+        BudgetCategory(user_id=user.id, name='Groceries & Household Goods', allocated=round(base_income * 0.18, 0), spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Utilities, Mobile & Internet', allocated=round(base_income * 0.08, 0), spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Transportation & Auto Fuel', allocated=round(base_income * 0.10, 0), spent=0.0, period='Monthly', alert_threshold=80),
+        BudgetCategory(user_id=user.id, name='Savings, SIPs & Mutual Funds', allocated=round(base_income * 0.25, 0), spent=0.0, period='Monthly', alert_threshold=90),
+        BudgetCategory(user_id=user.id, name='Annual Vacation & Travel Fund', allocated=round(base_income * 1.5, 0), spent=0.0, period='Yearly', alert_threshold=75)
     ]
     txns = []
     for idx, m in enumerate(months):
-        mo_key = m['key']
-        factor = 0.88 + (idx * 0.024)
-        txns.extend([
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='Primary Monthly Salary', category='Salary / Earnings', amount=round(base_income * factor, 2), txn_type='income', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-01", status='Completed', notes=f"{m['label']} Direct payroll NEFT"),
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='Advisory Consulting Retainer', category='Secondary Income', amount=round(base_income * 0.25 * factor, 2), txn_type='income', payment_mode='UPI', date=f"{mo_key}-15", status='Completed', notes=f"{m['label']} Professional advisory retainer"),
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='Apartment Monthly Lease Payment', category='Housing & Rent / EMI', amount=round(base_income * 0.32, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-03", status='Completed', notes=f"{m['label']} Residence rent auto-debit"),
-            Transaction(user_id=user.id, account_id=credit_acc.id, title='Supermarket & Household Supplies', category='Groceries & Household Goods', amount=round(base_income * 0.14 * factor, 2), txn_type='expense', payment_mode=PAY_CREDIT_CARD, date=f"{mo_key}-11", status='Completed', notes=f"{m['label']} Pantry & kitchen essentials"),
-            Transaction(user_id=user.id, account_id=wallet_acc.id, title='High-Speed Fiber & Mobile Plan', category='Utilities, Mobile & Internet', amount=round(base_income * 0.07, 2), txn_type='expense', payment_mode='UPI', date=f"{mo_key}-19", status='Completed', notes=f"{m['label']} Utility bill payment"),
-            Transaction(user_id=user.id, account_id=primary_acc.id, title='Index Fund SIP Automated Allocation', category='Savings, SIPs & Mutual Funds', amount=round(base_income * 0.22, 2), txn_type='expense', payment_mode=PAY_BANK_TRANSFER, date=f"{mo_key}-25", status='Completed', notes=f"{m['label']} Mutual fund monthly investment")
-        ])
+        txns.extend(_build_personal_month_txns(user, m, idx, primary_acc, credit_acc, wallet_acc))
     return budgets, txns
 
 
 def seed_user_financial_profile(user):
-    months = get_last_6_months()
+    months = get_multi_year_months()
 
     accounts = [
         Account(user_id=user.id, name='Primary Checking Account', account_type='Bank', balance=350000.0),
@@ -507,7 +689,49 @@ def seed_user_financial_profile(user):
         db.session.add(t)
     db.session.commit()
 
+    for b in budgets:
+        b.spent = compute_budget_spent(user.id, b)
+    db.session.commit()
+
     seed_user_investments_and_goals(user)
+
+
+def _build_month_txns_for_role(user, m, idx, primary_acc, credit_acc, wallet_acc):
+    if user.role == 'admin':
+        return _build_admin_month_txns(user, m, idx, primary_acc, credit_acc, wallet_acc)
+    if user.role == 'shop_owner':
+        return _build_shop_month_txns(user, m, idx, primary_acc, wallet_acc)
+    return _build_personal_month_txns(user, m, idx, primary_acc, credit_acc, wallet_acc)
+
+
+def ensure_multi_year_demo_history(user):
+    existing_txns = Transaction.query.filter_by(user_id=user.id).all()
+    existing_years = {t.date[:4] for t in existing_txns if t.date and len(t.date) >= 4}
+    if len(existing_years) >= 2:
+        return
+
+    accounts = Account.query.filter_by(user_id=user.id).order_by(Account.id.asc()).all()
+    if not accounts:
+        return
+
+    existing_months = {t.date[:7] for t in existing_txns if t.date and len(t.date) >= 7}
+    primary_acc = accounts[0]
+    credit_acc = next((a for a in accounts if a.account_type == PAY_CREDIT_CARD), primary_acc)
+    wallet_acc = next((a for a in accounts if a.account_type == 'Wallet'), primary_acc)
+
+    new_txns = []
+    for idx, m in enumerate(get_multi_year_months()):
+        if m['key'] not in existing_months:
+            new_txns.extend(_build_month_txns_for_role(user, m, idx, primary_acc, credit_acc, wallet_acc))
+
+    if not new_txns:
+        return
+    for t in new_txns:
+        db.session.add(t)
+    db.session.commit()
+    for b in BudgetCategory.query.filter_by(user_id=user.id).all():
+        b.spent = compute_budget_spent(user.id, b)
+    db.session.commit()
 
 
 def seed_user_investments_and_goals(user):
@@ -727,6 +951,7 @@ def init_seed_demo_accounts():
             db.session.commit()
             seed_user_financial_profile(user)
         else:
+            ensure_multi_year_demo_history(existing)
             seed_user_investments_and_goals(existing)
 
 
@@ -751,12 +976,15 @@ def _build_expense_donut(transactions):
     return donut_labels, donut_data, donut_colors, donut_items
 
 
-def _build_monthly_trends(transactions):
+def _build_monthly_trends(transactions, today_str=None):
+    cutoff = today_str or datetime.now().strftime('%Y-%m-%d')
     months = get_last_6_months()
     income_by_month = {m['key']: 0.0 for m in months}
     expense_by_month = {m['key']: 0.0 for m in months}
 
     for t in transactions:
+        if not t.date or t.date > cutoff:
+            continue
         mo_key = t.date[:7]
         if mo_key in income_by_month and t.txn_type == 'income':
             income_by_month[mo_key] += t.amount
@@ -775,52 +1003,79 @@ def index():
     return redirect(url_for('dashboard'))
 
 
-def _get_prev_month_key():
-    now = datetime.now()
-    year = now.year
-    month = now.month - 1
-    if month <= 0:
-        month = 12
-        year -= 1
-    return f"{year:04d}-{month:02d}"
-
-
 def _format_month_label(ym_key):
     try:
-        return datetime.strptime(ym_key, '%Y-%m').strftime('%b %Y')
+        return datetime.strptime(ym_key, '%Y-%m').strftime(FMT_MONTH_LABEL)
     except ValueError:
         return ym_key
 
 
-def _resolve_month_prefix(month_filter):
+def _resolve_period_scope(all_txns, default_period='month'):
+    keys = get_period_keys()
+    cutoff = keys['today_str']
+    period = request.args.get('period', default_period).strip().lower()
+    if period not in ('month', 'year', 'all'):
+        period = default_period
+
+    year_param = request.args.get('year', '').strip()
+    month_param = request.args.get('month', '').strip()
+    target_month = month_param if re.match(RE_YEAR_MONTH, month_param) else keys['current_month_key']
+    target_year = year_param if re.match(RE_YEAR_ONLY, year_param) else keys['current_year_key']
+
+    actual_all = [t for t in all_txns if not is_future_txn(t, cutoff)]
+    if period == 'month':
+        scoped_all = [t for t in all_txns if t.date and t.date.startswith(target_month)]
+        scoped_actual = [t for t in actual_all if t.date and t.date.startswith(target_month)]
+        m_label = _format_month_label(target_month)
+        period_label = f'This Month — {m_label}' if target_month == keys['current_month_key'] else m_label
+    elif period == 'year':
+        scoped_all = [t for t in all_txns if t.date and t.date.startswith(target_year)]
+        scoped_actual = [t for t in actual_all if t.date and t.date.startswith(target_year)]
+        period_label = f'This Year — {target_year}' if target_year == keys['current_year_key'] else f'Year {target_year}'
+    else:
+        scoped_all = all_txns
+        scoped_actual = actual_all
+        period_label = 'All Time'
+
+    return {
+        'keys': keys,
+        'period': period,
+        'target_month': target_month,
+        'target_year': target_year,
+        'period_label': period_label,
+        'scoped_all': scoped_all,
+        'scoped_actual': scoped_actual,
+        'actual_all': actual_all
+    }
+
+
+def _apply_date_filters_to_query(query, year_filter, month_filter, keys):
+    active_date = False
     if month_filter == 'this_month':
-        return datetime.now().strftime('%Y-%m')
+        return query.filter(Transaction.date.like(f"{keys['current_month_key']}%")), True
     if month_filter == 'last_month':
-        return _get_prev_month_key()
-    if re.match(r'^\d{4}-\d{2}$', month_filter):
-        return month_filter
-    return ''
+        return query.filter(Transaction.date.like(f"{keys['prev_month_key']}%")), True
+    if re.match(RE_YEAR_MONTH, month_filter):
+        return query.filter(Transaction.date.like(f'{month_filter}%')), True
 
-
-def _build_month_options(all_txns):
-    this_key = datetime.now().strftime('%Y-%m')
-    last_key = _get_prev_month_key()
-    options = [
-        {'value': 'this_month', 'label': f'This Month ({_format_month_label(this_key)})'},
-        {'value': 'last_month', 'label': f'Last Month ({_format_month_label(last_key)})'}
-    ]
-    raw_months = sorted({t.date[:7] for t in all_txns if t.date and len(t.date) >= 7}, reverse=True)
-    for ym in raw_months:
-        if ym not in (this_key, last_key):
-            options.append({'value': ym, 'label': _format_month_label(ym)})
-    return options
+    if re.match(RE_YEAR_ONLY, year_filter) and re.match(r'^(0[1-9]|1[0-2])$', month_filter):
+        return query.filter(Transaction.date.like(f'{year_filter}-{month_filter}%')), True
+    if re.match(RE_YEAR_ONLY, year_filter):
+        return query.filter(Transaction.date.like(f'{year_filter}%')), True
+    if re.match(r'^(0[1-9]|1[0-2])$', month_filter):
+        return query.filter(Transaction.date.like(f'____-{month_filter}-%')), True
+    return query, active_date
 
 
 def _build_filtered_ledger(user_id, txn_type):
+    keys = get_period_keys()
+    cutoff = keys['today_str']
     query = Transaction.query.filter_by(user_id=user_id, txn_type=txn_type)
+
     search = request.args.get('q', '').strip()
     cat_filter = request.args.get('category', '').strip()
     mode_filter = request.args.get('mode', '').strip()
+    year_filter = request.args.get('year', '').strip()
     month_filter = request.args.get('month', '').strip()
 
     if search:
@@ -830,38 +1085,94 @@ def _build_filtered_ledger(user_id, txn_type):
     if mode_filter:
         query = query.filter_by(payment_mode=mode_filter)
 
-    month_prefix = _resolve_month_prefix(month_filter)
-    if month_prefix:
-        query = query.filter(Transaction.date.like(f'{month_prefix}%'))
-
+    query, date_filtered = _apply_date_filters_to_query(query, year_filter, month_filter, keys)
     transactions = query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+
     all_txns = Transaction.query.filter_by(user_id=user_id, txn_type=txn_type).all()
+    actual_txns = [t for t in all_txns if not is_future_txn(t, cutoff)]
 
-    total_amount = round(sum(t.amount for t in transactions), 2)
-    avg_amount = round((total_amount / len(transactions)), 2) if transactions else 0.0
+    this_month_txns = [t for t in actual_txns if t.date and t.date.startswith(keys['current_month_key'])]
+    prev_month_txns = [t for t in actual_txns if t.date and t.date.startswith(keys['prev_month_key'])]
+    this_year_txns = [t for t in actual_txns if t.date and t.date.startswith(keys['current_year_key'])]
 
-    top_group = 'None'
-    if transactions:
-        group_totals = {}
-        for t in transactions:
-            group_totals[t.category] = group_totals.get(t.category, 0.0) + t.amount
-        top_group = max(group_totals, key=lambda k: group_totals[k])
+    this_month_total = round(sum(t.amount for t in this_month_txns), 2)
+    prev_month_total = round(sum(t.amount for t in prev_month_txns), 2)
+    this_year_total = round(sum(t.amount for t in this_year_txns), 2)
+    all_time_total = round(sum(t.amount for t in actual_txns), 2)
+    elapsed_months = max(keys['now'].month, 1)
+    this_year_monthly_avg = round(this_year_total / elapsed_months, 2)
+    month_delta = compute_pct_change(this_month_total, prev_month_total, keys['prev_month_label'])
+
+    filtered_total = round(sum(t.amount for t in transactions), 2)
+    year_set = {t.date[:4] for t in all_txns if t.date and len(t.date) >= 4}
+    year_set.add(keys['current_year_key'])
+    year_options = sorted(year_set, reverse=True)
+    month_num_options = [
+        {'value': f'{idx:02d}', 'label': MONTH_NAMES[idx - 1]}
+        for idx in range(1, 13)
+    ]
 
     return {
         'transactions': transactions,
-        'total_amount': total_amount,
-        'avg_amount': avg_amount,
-        'top_group': top_group,
+        'filtered_total': filtered_total,
+        'this_month_total': this_month_total,
+        'this_month_count': len(this_month_txns),
+        'month_delta': month_delta,
+        'current_month_label': keys['current_month_label'],
+        'this_year_total': this_year_total,
+        'this_year_monthly_avg': this_year_monthly_avg,
+        'current_year_key': keys['current_year_key'],
+        'all_time_total': all_time_total,
+        'all_time_count': len(actual_txns),
         'categories': sorted({t.category for t in all_txns}),
         'payment_modes': sorted({t.payment_mode for t in all_txns if t.payment_mode}),
-        'month_options': _build_month_options(all_txns),
+        'year_options': year_options,
+        'month_num_options': month_num_options,
         'search': search,
         'selected_category': cat_filter,
         'selected_mode': mode_filter,
+        'selected_year': year_filter,
         'selected_month': month_filter,
-        'is_filtered': bool(search or cat_filter or mode_filter or month_prefix),
+        'is_filtered': bool(search or cat_filter or mode_filter or date_filtered),
         'accounts': Account.query.filter_by(user_id=user_id).all()
     }
+
+
+def _compute_dashboard_comparisons(period, keys, actual_all, total_income, total_expense):
+    if period == 'month':
+        prev_prefix = keys['prev_month_key']
+        prev_label = keys['prev_month_label']
+    elif period == 'year':
+        prev_prefix = keys['prev_year_key']
+        prev_label = keys['prev_year_key']
+    else:
+        return None, None
+
+    prev_in = round(sum(t.amount for t in actual_all if t.txn_type == 'income' and t.date and t.date.startswith(prev_prefix)), 2)
+    prev_out = round(sum(t.amount for t in actual_all if t.txn_type == 'expense' and t.date and t.date.startswith(prev_prefix)), 2)
+    return (
+        compute_pct_change(total_income, prev_in, prev_label),
+        compute_pct_change(total_expense, prev_out, prev_label)
+    )
+
+
+def _compute_dashboard_budget_kpi(user_id, budgets, period, keys):
+    use_yearly = (period == 'year') and any(b.period == 'Yearly' for b in budgets)
+    if use_yearly:
+        target_budgets = [b for b in budgets if b.period == 'Yearly']
+        scope_label = f"Yearly Budgets ({keys['current_year_key']})"
+    else:
+        target_budgets = [b for b in budgets if b.period == 'Monthly']
+        scope_label = f"Monthly Budgets ({keys['current_month_label']})"
+
+    total_allocated = round(sum(b.allocated for b in target_budgets), 2)
+    total_spent = round(sum(
+        compute_budget_spent(user_id, b, keys['current_month_key'], keys['current_year_key'], keys['today_str'])
+        for b in target_budgets
+    ), 2)
+    utilization = round((total_spent / total_allocated * 100), 1) if total_allocated > 0 else 0.0
+    variance = round(total_allocated - total_spent, 2)
+    return total_allocated, total_spent, utilization, variance, scope_label
 
 
 @app.route('/dashboard')
@@ -870,48 +1181,46 @@ def dashboard():
     if not current_user.budgets and not current_user.transactions:
         seed_user_financial_profile(current_user)
 
-    period = request.args.get('period', 'all').strip().lower()
-    if period not in ('all', 'month'):
-        period = 'all'
-
     all_transactions = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc(), Transaction.id.desc()).all()
-    if period == 'month':
-        month_prefix = datetime.now().strftime('%Y-%m')
-        scoped_txns = [t for t in all_transactions if t.date and t.date.startswith(month_prefix)]
-        period_label = f"This Month ({_format_month_label(month_prefix)})"
-    else:
-        scoped_txns = all_transactions
-        period_label = 'All Time'
+    scope = _resolve_period_scope(all_transactions, default_period='month')
+    keys = scope['keys']
+    period = scope['period']
+    scoped_actual = scope['scoped_actual']
+    scoped_all = scope['scoped_all']
 
     budgets = BudgetCategory.query.filter_by(user_id=current_user.id).all()
     accounts = Account.query.filter_by(user_id=current_user.id).all()
 
-    income_txns = [t for t in scoped_txns if t.txn_type == 'income']
-    expense_txns = [t for t in scoped_txns if t.txn_type == 'expense']
+    income_txns = [t for t in scoped_actual if t.txn_type == 'income']
+    expense_txns = [t for t in scoped_actual if t.txn_type == 'expense']
     total_income = round(sum(t.amount for t in income_txns), 2)
     total_expense = round(sum(t.amount for t in expense_txns), 2)
     net_profit = round(total_income - total_expense, 2)
     operating_margin = round((net_profit / total_income * 100), 1) if total_income > 0 else 0.0
     spend_pct = round((total_expense / total_income * 100), 1) if total_income > 0 else 0.0
 
-    total_allocated = sum(b.allocated for b in budgets if b.period == 'Monthly')
-    total_budget_spent = sum(b.spent for b in budgets if b.period == 'Monthly')
-    budget_utilization = round((total_budget_spent / total_allocated * 100), 1) if total_allocated > 0 else 0.0
-    budget_variance = round(total_allocated - total_budget_spent, 2)
+    income_delta, expense_delta = _compute_dashboard_comparisons(period, keys, scope['actual_all'], total_income, total_expense)
+    total_allocated, total_budget_spent, budget_utilization, budget_variance, budget_scope_label = _compute_dashboard_budget_kpi(
+        current_user.id, budgets, period, keys
+    )
 
-    donut_labels, donut_data, donut_colors, donut_items = _build_expense_donut(scoped_txns)
-    trend_labels, trend_income, trend_expense = _build_monthly_trends(all_transactions)
+    donut_labels, donut_data, donut_colors, donut_items = _build_expense_donut(scoped_actual)
+    trend_labels, trend_income, trend_expense = _build_monthly_trends(all_transactions, keys['today_str'])
 
     return render_template(
         'dashboard.html',
         active_page='dashboard',
         page_title='Dashboard',
         period=period,
-        period_label=period_label,
-        transactions=scoped_txns[:8],
+        period_label=scope['period_label'],
+        current_month_label=keys['current_month_label'],
+        current_year_key=keys['current_year_key'],
+        transactions=scoped_all[:8],
         income_count=len(income_txns),
         expense_count=len(expense_txns),
         spend_pct=spend_pct,
+        income_delta=income_delta,
+        expense_delta=expense_delta,
         budgets=budgets,
         accounts=accounts,
         total_income=total_income,
@@ -922,6 +1231,7 @@ def dashboard():
         total_budget_spent=total_budget_spent,
         budget_utilization=budget_utilization,
         budget_variance=budget_variance,
+        budget_scope_label=budget_scope_label,
         donut_labels=donut_labels,
         donut_data=donut_data,
         donut_colors=donut_colors,
@@ -940,19 +1250,7 @@ def expenses():
         'expenses.html',
         active_page='expenses',
         page_title='Expenses',
-        transactions=data['transactions'],
-        total_expense=data['total_amount'],
-        avg_expense=data['avg_amount'],
-        top_cat=data['top_group'],
-        categories=data['categories'],
-        payment_modes=data['payment_modes'],
-        month_options=data['month_options'],
-        search=data['search'],
-        selected_category=data['selected_category'],
-        selected_mode=data['selected_mode'],
-        selected_month=data['selected_month'],
-        is_filtered=data['is_filtered'],
-        accounts=data['accounts']
+        **data
     )
 
 
@@ -964,42 +1262,70 @@ def income():
         'income.html',
         active_page='income',
         page_title='Income',
-        transactions=data['transactions'],
-        total_income=data['total_amount'],
-        avg_income=data['avg_amount'],
-        top_source=data['top_group'],
-        categories=data['categories'],
-        payment_modes=data['payment_modes'],
-        month_options=data['month_options'],
-        search=data['search'],
-        selected_category=data['selected_category'],
-        selected_mode=data['selected_mode'],
-        selected_month=data['selected_month'],
-        is_filtered=data['is_filtered'],
-        accounts=data['accounts']
+        **data
     )
 
 
 @app.route('/budgets')
 @login_required
 def budgets():
+    keys = get_period_keys()
+    cutoff = keys['today_str']
+    selected_month = request.args.get('month', '').strip()
+    if not re.match(RE_YEAR_MONTH, selected_month):
+        selected_month = keys['current_month_key']
+    selected_year = request.args.get('year', '').strip()
+    if not re.match(RE_YEAR_ONLY, selected_year):
+        selected_year = keys['current_year_key']
+    active_tab = request.args.get('tab', 'monthly').strip().lower()
+    if active_tab not in ('monthly', 'yearly'):
+        active_tab = 'monthly'
+
     budgets_list = BudgetCategory.query.filter_by(user_id=current_user.id).all()
+    all_txns = Transaction.query.filter_by(user_id=current_user.id).all()
+    actual_txns = [t for t in all_txns if not is_future_txn(t, cutoff)]
 
-    monthly_budgets = [b for b in budgets_list if b.period == 'Monthly']
-    yearly_budgets = [b for b in budgets_list if b.period == 'Yearly']
+    monthly_budgets = []
+    yearly_budgets = []
+    for b in budgets_list:
+        live_spent = compute_budget_spent(current_user.id, b, selected_month, selected_year, cutoff)
+        item = build_live_budget_item(b, live_spent)
+        if b.period == 'Monthly':
+            monthly_budgets.append(item)
+        else:
+            yearly_budgets.append(item)
 
-    total_monthly_allocated = sum(b.allocated for b in monthly_budgets)
-    total_monthly_spent = sum(b.spent for b in monthly_budgets)
+    total_monthly_allocated = round(sum(b['allocated'] for b in monthly_budgets), 2)
+    total_monthly_spent = round(sum(b['spent'] for b in monthly_budgets), 2)
     monthly_pct = round((total_monthly_spent / total_monthly_allocated * 100), 1) if total_monthly_allocated > 0 else 0.0
 
-    total_yearly_allocated = sum(b.allocated for b in yearly_budgets)
-    total_yearly_spent = sum(b.spent for b in yearly_budgets)
+    total_yearly_allocated = round(sum(b['allocated'] for b in yearly_budgets), 2)
+    total_yearly_spent = round(sum(b['spent'] for b in yearly_budgets), 2)
     yearly_pct = round((total_yearly_spent / total_yearly_allocated * 100), 1) if total_yearly_allocated > 0 else 0.0
+
+    monthly_income = round(sum(t.amount for t in actual_txns if t.txn_type == 'income' and t.date.startswith(selected_month)), 2)
+    yearly_income = round(sum(t.amount for t in actual_txns if t.txn_type == 'income' and t.date.startswith(selected_year)), 2)
+
+    month_set = {t.date[:7] for t in all_txns if t.date and len(t.date) >= 7}
+    month_set.add(keys['current_month_key'])
+    month_set.add(selected_month)
+    available_months = [{'key': mk, 'label': _format_month_label(mk)} for mk in sorted(month_set, reverse=True)]
+
+    year_set = {t.date[:4] for t in all_txns if t.date and len(t.date) >= 4}
+    year_set.add(keys['current_year_key'])
+    year_set.add(selected_year)
+    available_years = sorted(year_set, reverse=True)
 
     return render_template(
         'budgets.html',
         active_page='budgets',
         page_title='Budgets',
+        active_tab=active_tab,
+        selected_month=selected_month,
+        selected_month_label=_format_month_label(selected_month),
+        selected_year=selected_year,
+        available_months=available_months,
+        available_years=available_years,
         monthly_budgets=monthly_budgets,
         yearly_budgets=yearly_budgets,
         total_monthly_allocated=total_monthly_allocated,
@@ -1007,15 +1333,15 @@ def budgets():
         monthly_pct=monthly_pct,
         total_yearly_allocated=total_yearly_allocated,
         total_yearly_spent=total_yearly_spent,
-        yearly_pct=yearly_pct
+        yearly_pct=yearly_pct,
+        monthly_income=monthly_income,
+        yearly_income=yearly_income
     )
 
 
-def _parse_budget_inputs(default_spent=0.0):
+def _parse_budget_inputs():
     name = request.form.get('name', '').strip()
     allocated = parse_finite_float(request.form.get('allocated', ''))
-    spent_raw = request.form.get('spent', '').strip()
-    spent = parse_finite_float(spent_raw, default=default_spent) if spent_raw != '' else default_spent
     period = request.form.get('period', 'Monthly').strip()
     threshold_str = request.form.get('alert_threshold', '80').strip()
 
@@ -1028,8 +1354,6 @@ def _parse_budget_inputs(default_spent=0.0):
         return None, 'Budget category name is required.'
     if allocated is None or allocated <= 0:
         return None, 'Budget limit must be a valid positive number.'
-    if spent is None or spent < 0:
-        return None, 'Spent amount must be zero or a positive number.'
     if period not in VALID_BUDGET_PERIODS:
         return None, 'Budget period must be Monthly or Yearly.'
     if not (1 <= threshold <= 100):
@@ -1038,8 +1362,6 @@ def _parse_budget_inputs(default_spent=0.0):
     return {
         'name': name,
         'allocated': round(allocated, 2),
-        'spent': round(spent, 2),
-        'spent_provided': spent_raw != '',
         'period': period,
         'threshold': threshold
     }, None
@@ -1048,7 +1370,7 @@ def _parse_budget_inputs(default_spent=0.0):
 @app.route('/add-budget', methods=['POST'])
 @login_required
 def add_budget():
-    parsed, err = _parse_budget_inputs(default_spent=0.0)
+    parsed, err = _parse_budget_inputs()
     if err or not parsed:
         flash(err or 'Unable to save budget.', 'danger')
         return redirect(url_for('budgets'))
@@ -1060,19 +1382,19 @@ def add_budget():
     ).first()
     if existing:
         existing.allocated = parsed['allocated']
-        if parsed['spent_provided']:
-            existing.spent = parsed['spent']
         existing.alert_threshold = parsed['threshold']
+        existing.spent = compute_budget_spent(current_user.id, existing)
         flash(f'Budget for "{parsed["name"]}" ({parsed["period"]}) updated successfully.', 'success')
     else:
         new_b = BudgetCategory(
             user_id=current_user.id,
             name=parsed['name'],
             allocated=parsed['allocated'],
-            spent=parsed['spent'],
+            spent=0.0,
             period=parsed['period'],
             alert_threshold=parsed['threshold']
         )
+        new_b.spent = compute_budget_spent(current_user.id, new_b)
         db.session.add(new_b)
         flash(f'New {parsed["period"]} budget "{parsed["name"]}" created.', 'success')
 
@@ -1088,16 +1410,16 @@ def edit_budget(budget_id):
         flash('Budget category not found.', 'danger')
         return redirect(url_for('budgets'))
 
-    parsed, err = _parse_budget_inputs(default_spent=budget.spent)
+    parsed, err = _parse_budget_inputs()
     if err or not parsed:
         flash(err or 'Unable to update budget.', 'danger')
         return redirect(url_for('budgets'))
 
     budget.name = parsed['name']
     budget.allocated = parsed['allocated']
-    budget.spent = parsed['spent']
     budget.period = parsed['period']
     budget.alert_threshold = parsed['threshold']
+    budget.spent = compute_budget_spent(current_user.id, budget)
 
     db.session.commit()
     flash(f'Budget "{budget.name}" updated successfully.', 'success')
@@ -1113,6 +1435,105 @@ def delete_budget(budget_id):
         db.session.commit()
         flash('Budget category removed.', 'info')
     return redirect(url_for('budgets'))
+
+
+def _build_history_monthly_rows(selected_year, actual_txns, all_txns, current_month_key):
+    rows = []
+    for m_idx in range(1, 13):
+        mo_key = f'{selected_year}-{m_idx:02d}'
+        m_actual = [t for t in actual_txns if t.date and t.date.startswith(mo_key)]
+        m_display = [t for t in all_txns if t.date and t.date.startswith(mo_key)]
+        m_in = round(sum(t.amount for t in m_actual if t.txn_type == 'income'), 2)
+        m_out = round(sum(t.amount for t in m_actual if t.txn_type == 'expense'), 2)
+        m_save = round(m_in - m_out, 2)
+        m_rate = round((m_save / m_in * 100), 1) if m_in > 0 else 0.0
+        rows.append({
+            'month_num': f'{m_idx:02d}',
+            'month_key': mo_key,
+            'month_label': f'{MONTH_NAMES[m_idx - 1]} {selected_year}',
+            'short_label': MONTH_SHORT_NAMES[m_idx - 1],
+            'is_current': mo_key == current_month_key,
+            'income': m_in,
+            'expense': m_out,
+            'savings': m_save,
+            'savings_rate': m_rate,
+            'count': len(m_actual),
+            'txns': m_display
+        })
+    return rows
+
+
+@app.route('/history')
+@login_required
+def history():
+    if not current_user.transactions:
+        seed_user_financial_profile(current_user)
+
+    keys = get_period_keys()
+    cutoff = keys['today_str']
+    all_txns = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+    actual_txns = [t for t in all_txns if not is_future_txn(t, cutoff)]
+
+    all_time_income = round(sum(t.amount for t in actual_txns if t.txn_type == 'income'), 2)
+    all_time_expense = round(sum(t.amount for t in actual_txns if t.txn_type == 'expense'), 2)
+    all_time_savings = round(all_time_income - all_time_expense, 2)
+    all_time_rate = round((all_time_savings / all_time_income * 100), 1) if all_time_income > 0 else 0.0
+
+    year_set = {t.date[:4] for t in actual_txns if t.date and len(t.date) >= 4}
+    year_set.add(keys['current_year_key'])
+    years_desc = sorted(year_set, reverse=True)
+    years_asc = sorted(year_set)
+
+    year_cards = []
+    for yr in years_desc:
+        y_txns = [t for t in actual_txns if t.date and t.date.startswith(yr)]
+        y_in = round(sum(t.amount for t in y_txns if t.txn_type == 'income'), 2)
+        y_out = round(sum(t.amount for t in y_txns if t.txn_type == 'expense'), 2)
+        y_save = round(y_in - y_out, 2)
+        y_rate = round((y_save / y_in * 100), 1) if y_in > 0 else 0.0
+        year_cards.append({
+            'year': yr,
+            'income': y_in,
+            'expense': y_out,
+            'savings': y_save,
+            'savings_rate': y_rate,
+            'count': len(y_txns)
+        })
+
+    years_span_label = f'{years_asc[0]} – {years_asc[-1]}' if len(years_asc) > 1 else years_asc[0]
+    best_saving_year = max(year_cards, key=lambda item: item['savings']) if year_cards else None
+
+    year_map = {c['year']: c for c in year_cards}
+    yoy_labels = years_asc
+    yoy_income = [year_map[y]['income'] for y in years_asc]
+    yoy_expense = [year_map[y]['expense'] for y in years_asc]
+
+    req_year = request.args.get('year', '').strip()
+    selected_year = req_year if req_year in year_set else keys['current_year_key']
+    monthly_rows = _build_history_monthly_rows(selected_year, actual_txns, all_txns, keys['current_month_key'])
+
+    return render_template(
+        'history.html',
+        active_page='history',
+        page_title='Financial History',
+        all_time_income=all_time_income,
+        all_time_expense=all_time_expense,
+        all_time_savings=all_time_savings,
+        all_time_rate=all_time_rate,
+        years_count=len(years_asc),
+        years_span_label=years_span_label,
+        best_saving_year=best_saving_year,
+        year_cards=year_cards,
+        selected_year=selected_year,
+        yoy_labels=yoy_labels,
+        yoy_income=yoy_income,
+        yoy_expense=yoy_expense,
+        monthly_rows=monthly_rows,
+        m_labels=[r['short_label'] for r in monthly_rows],
+        m_income=[r['income'] for r in monthly_rows],
+        m_expense=[r['expense'] for r in monthly_rows],
+        m_savings=[r['savings'] for r in monthly_rows]
+    )
 
 
 @app.route('/accounts')
@@ -1187,8 +1608,10 @@ def delete_account(account_id):
 @app.route('/categories')
 @login_required
 def categories():
-    expenses_list = Transaction.query.filter_by(user_id=current_user.id, txn_type='expense').all()
-    total_spent = sum(t.amount for t in expenses_list)
+    all_txns = Transaction.query.filter_by(user_id=current_user.id, txn_type='expense').all()
+    scope = _resolve_period_scope(all_txns, default_period='month')
+    expenses_list = scope['scoped_actual']
+    total_spent = round(sum(t.amount for t in expenses_list), 2)
 
     cat_stats = {}
     for t in expenses_list:
@@ -1219,6 +1642,10 @@ def categories():
         'categories.html',
         active_page='categories',
         page_title='Categories',
+        period=scope['period'],
+        period_label=scope['period_label'],
+        target_year=scope['target_year'],
+        target_month=scope['target_month'],
         categories=cat_rows,
         total_spent=total_spent,
         total_txns=len(expenses_list)
@@ -1228,12 +1655,22 @@ def categories():
 @app.route('/reports')
 @login_required
 def reports():
-    transactions = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc()).all()
-    budgets = BudgetCategory.query.filter_by(user_id=current_user.id).all()
+    all_txns = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc()).all()
+    scope = _resolve_period_scope(all_txns, default_period='month')
+    keys = scope['keys']
+    transactions = scope['scoped_actual']
+    raw_budgets = BudgetCategory.query.filter_by(user_id=current_user.id).all()
+    live_budgets = [
+        build_live_budget_item(
+            b,
+            compute_budget_spent(current_user.id, b, scope['target_month'], scope['target_year'], keys['today_str'])
+        )
+        for b in raw_budgets
+    ]
 
-    total_income = sum(t.amount for t in transactions if t.txn_type == 'income')
-    total_expense = sum(t.amount for t in transactions if t.txn_type == 'expense')
-    net_profit = total_income - total_expense
+    total_income = round(sum(t.amount for t in transactions if t.txn_type == 'income'), 2)
+    total_expense = round(sum(t.amount for t in transactions if t.txn_type == 'expense'), 2)
+    net_profit = round(total_income - total_expense, 2)
     operating_margin = round((net_profit / total_income * 100), 1) if total_income > 0 else 0.0
 
     cogs_estimate = round(total_expense * 0.65, 2)
@@ -1249,8 +1686,12 @@ def reports():
         'reports.html',
         active_page='reports',
         page_title='Financial Reports',
+        period=scope['period'],
+        period_label=scope['period_label'],
+        target_year=scope['target_year'],
+        target_month=scope['target_month'],
         transactions=transactions,
-        budgets=budgets,
+        budgets=live_budgets,
         total_income=total_income,
         total_expense=total_expense,
         net_profit=net_profit,
@@ -1266,7 +1707,9 @@ def reports():
 @app.route('/export/csv')
 @login_required
 def export_csv():
-    transactions = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc()).all()
+    all_txns = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc()).all()
+    scope = _resolve_period_scope(all_txns, default_period='all')
+    transactions = scope['scoped_all']
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1285,7 +1728,9 @@ def export_csv():
         ])
 
     output.seek(0)
-    filename = f"FinSight_Ledger_{current_user.fullname.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.csv"
+    suffix_map = {'year': scope['target_year'], 'month': scope['target_month']}
+    suffix = suffix_map.get(scope['period'], 'AllTime')
+    filename = f"FinSight_{suffix}_{current_user.fullname.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.csv"
     return Response(
         output.getvalue(),
         mimetype="text/csv",
@@ -1685,7 +2130,7 @@ def _record_goal_deposit_transaction(user_id, goal_id, title, amount, date_val, 
         user_id=user_id,
         account_id=linked_account_id,
         title=title,
-        category='Savings & Goals',
+        category=CAT_SAVINGS_GOALS,
         amount=amount,
         txn_type='expense',
         payment_mode=PAY_BANK_TRANSFER,
@@ -1694,7 +2139,7 @@ def _record_goal_deposit_transaction(user_id, goal_id, title, amount, date_val, 
         notes=notes
     )
     db.session.add(txn)
-    _apply_budget_expense(user_id, 'Savings & Goals', amount, date_val)
+    _apply_budget_expense(user_id, CAT_SAVINGS_GOALS)
     db.session.flush()
 
     gt = GoalTransaction(
@@ -2043,28 +2488,12 @@ def _parse_optional_int(val_str):
         return None
 
 
-def _budget_matches_txn_date(budget, date_str):
-    if not date_str:
-        return True
-    now = datetime.now()
-    if budget.period == 'Monthly':
-        return date_str.startswith(now.strftime('%Y-%m'))
-    if budget.period == 'Yearly':
-        return date_str.startswith(now.strftime('%Y'))
-    return False
+def _apply_budget_expense(user_id, category):
+    db.session.flush()
+    sync_budget_spent_cache(user_id, category)
 
 
-def _apply_budget_expense(user_id, category, amount, date_str=None):
-    matched_budgets = BudgetCategory.query.filter(
-        BudgetCategory.user_id == user_id,
-        func.lower(BudgetCategory.name) == category.lower()
-    ).all()
-    for b in matched_budgets:
-        if _budget_matches_txn_date(b, date_str):
-            b.spent = round(b.spent + amount, 2)
-
-
-def _apply_transaction_side_effects(user_id, account_id, category, txn_type, amount, date_str=None):
+def _apply_transaction_side_effects(user_id, account_id, category, txn_type, amount):
     if account_id:
         acc = Account.query.filter_by(id=account_id, user_id=user_id).first()
         if acc:
@@ -2072,7 +2501,7 @@ def _apply_transaction_side_effects(user_id, account_id, category, txn_type, amo
             acc.balance = round(acc.balance + delta, 2)
 
     if txn_type == 'expense':
-        _apply_budget_expense(user_id, category, amount, date_str)
+        _apply_budget_expense(user_id, category)
 
 
 def _revert_transaction_side_effects(user_id, txn):
@@ -2082,14 +2511,33 @@ def _revert_transaction_side_effects(user_id, txn):
             delta = -txn.amount if txn.txn_type == 'income' else txn.amount
             acc.balance = round(acc.balance + delta, 2)
 
-    if txn.txn_type == 'expense':
-        matched_budgets = BudgetCategory.query.filter(
-            BudgetCategory.user_id == user_id,
-            func.lower(BudgetCategory.name) == txn.category.lower()
-        ).all()
-        for b in matched_budgets:
-            if _budget_matches_txn_date(b, txn.date):
-                b.spent = round(max(0.0, b.spent - txn.amount), 2)
+
+def _check_same_account_edit(user_id, account_id, old_delta, new_delta):
+    acc = Account.query.filter_by(id=account_id, user_id=user_id).first()
+    if not acc or acc.account_type == PAY_CREDIT_CARD:
+        return None
+    projected = round(acc.balance - old_delta + new_delta, 2)
+    if projected < 0.0:
+        return (
+            f'Insufficient balance in {acc.name} for this update '
+            f'(Available after change would be {format_money(projected)}). '
+            f'Choose another account or adjust the amount.'
+        )
+    return None
+
+
+def _check_old_account_detach(user_id, account_id, old_delta):
+    if not account_id:
+        return None
+    old_acc = Account.query.filter_by(id=account_id, user_id=user_id).first()
+    if not old_acc or old_acc.account_type == PAY_CREDIT_CARD:
+        return None
+    if round(old_acc.balance - old_delta, 2) < 0.0:
+        return (
+            f'Cannot change account on {old_acc.name} because funds from this income '
+            f'have already been spent (Available: {format_money(old_acc.balance)}).'
+        )
+    return None
 
 
 def _simulate_edit_account_balances(user_id, txn, new_account_id, new_type, new_amount):
@@ -2097,33 +2545,17 @@ def _simulate_edit_account_balances(user_id, txn, new_account_id, new_type, new_
     new_delta = new_amount if new_type == 'income' else -new_amount
 
     if txn.account_id and txn.account_id == new_account_id:
-        acc = Account.query.filter_by(id=txn.account_id, user_id=user_id).first()
-        if acc and acc.account_type != PAY_CREDIT_CARD:
-            projected = round(acc.balance - old_delta + new_delta, 2)
-            if projected < 0.0:
-                return (
-                    f'Insufficient balance in {acc.name} for this update '
-                    f'(Available after change would be {format_money(projected)}). '
-                    f'Choose another account or adjust the amount.'
-                )
-        return None
+        return _check_same_account_edit(user_id, txn.account_id, old_delta, new_delta)
 
-    if txn.account_id:
-        old_acc = Account.query.filter_by(id=txn.account_id, user_id=user_id).first()
-        if old_acc and old_acc.account_type != PAY_CREDIT_CARD:
-            projected_old = round(old_acc.balance - old_delta, 2)
-            if projected_old < 0.0:
-                return (
-                    f'Cannot change account on {old_acc.name} because funds from this income '
-                    f'have already been spent (Available: {format_money(old_acc.balance)}).'
-                )
+    detach_err = _check_old_account_detach(user_id, txn.account_id, old_delta)
+    if detach_err:
+        return detach_err
 
-    if new_account_id:
+    if new_account_id and new_type == 'expense':
         new_acc = Account.query.filter_by(id=new_account_id, user_id=user_id).first()
-        if new_acc and new_type == 'expense':
-            ok, err_msg = check_sufficient_balance(new_acc, new_amount)
-            if not ok:
-                return err_msg
+        ok, err_msg = check_sufficient_balance(new_acc, new_amount)
+        if not ok:
+            return err_msg
     return None
 
 
@@ -2197,8 +2629,7 @@ def add_transaction():
         parsed['account_id'],
         parsed['category'],
         parsed['txn_type'],
-        parsed['amount'],
-        parsed['date']
+        parsed['amount']
     )
 
     db.session.commit()
@@ -2232,6 +2663,7 @@ def edit_transaction(txn_id):
         flash(sim_err, 'danger')
         return redirect(request.referrer or url_for('dashboard'))
 
+    old_category = txn.category
     _revert_transaction_side_effects(current_user.id, txn)
 
     txn.title = parsed['title']
@@ -2248,9 +2680,11 @@ def edit_transaction(txn_id):
         parsed['account_id'],
         parsed['category'],
         parsed['txn_type'],
-        parsed['amount'],
-        parsed['date']
+        parsed['amount']
     )
+    db.session.flush()
+    sync_budget_spent_cache(current_user.id, old_category)
+    sync_budget_spent_cache(current_user.id, parsed['category'])
 
     db.session.commit()
     flash(f'Transaction "{txn.title}" updated successfully.', 'success')
@@ -2282,8 +2716,11 @@ def delete_transaction(txn_id):
             goal.status = goal.computed_status
         db.session.delete(gt)
 
+    deleted_category = txn.category
     _revert_transaction_side_effects(current_user.id, txn)
     db.session.delete(txn)
+    db.session.flush()
+    sync_budget_spent_cache(current_user.id, deleted_category)
     db.session.commit()
     flash('Transaction deleted.', 'info')
     return redirect(request.referrer or url_for('dashboard'))

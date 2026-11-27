@@ -23,10 +23,11 @@
         </p>
       </div>
 
-      <div class="period-toggle-pill" role="group" aria-label="Choose summary time period">
+      <nav class="period-toggle-pill" aria-label="Choose summary time period">
         <a href="{{ url_for('dashboard', period='month') }}" class="period-pill-btn {% if period == 'month' %}active{% endif %}">This Month</a>
+        <a href="{{ url_for('dashboard', period='year') }}" class="period-pill-btn {% if period == 'year' %}active{% endif %}">This Year</a>
         <a href="{{ url_for('dashboard', period='all') }}" class="period-pill-btn {% if period == 'all' %}active{% endif %}">All Time</a>
-      </div>
+      </nav>
     </div>
 
     <div class="quick-action-bar">
@@ -42,14 +43,14 @@
     </div>
 
     <div class="hero-profile-summary">
-      <div class="profile-tag-item"><strong>Showing:</strong> {{ period_label }}</div>
+      <div class="profile-tag-item"><strong>Showing:</strong> <span class="period-scope-pill">{{ period_label }}</span></div>
       <span class="hero-divider">&bull;</span>
       <div class="profile-tag-item"><strong>Currency:</strong> <span class="badge-curr">{{ currency_code }} ({{ currency_symbol }})</span></div>
       <span class="hero-divider">&bull;</span>
       <div class="profile-tag-item"><strong>Country:</strong> {{ current_user.country or 'India' }}</div>
       {% if current_user.total_income and current_user.total_income > 0 %}
         <span class="hero-divider">&bull;</span>
-        <div class="profile-tag-item"><strong>Yearly Income Goal:</strong> <span class="font-mono font-bold text-blue">{{ format_money(current_user.total_income) }}</span></div>
+        <div class="profile-tag-item"><strong>Expected Annual Income (Profile):</strong> <span class="font-mono font-bold text-blue">{{ format_money(current_user.total_income) }}</span></div>
       {% endif %}
     </div>
   </div>
@@ -71,14 +72,14 @@
         <span class="step-num-badge">2</span>
         <div>
           <strong>Stay Under Budget</strong>
-          <p>Set monthly limits on the <a href="{{ url_for('budgets') }}">Budgets</a> page to get automatic alerts.</p>
+          <p>Set monthly or yearly limits on <a href="{{ url_for('budgets') }}">Budgets</a> to track spending automatically.</p>
         </div>
       </div>
       <div class="quickstart-step">
         <span class="step-num-badge">3</span>
         <div>
-          <strong>Plan a Goal</strong>
-          <p>Create a savings target on <a href="{{ url_for('goals') }}">Goals</a> and watch your progress bar grow.</p>
+          <strong>Plan &amp; Review History</strong>
+          <p>Create targets on <a href="{{ url_for('goals') }}">Goals</a> and review any year or month on <a href="{{ url_for('history') }}">History</a>.</p>
         </div>
       </div>
     </div>
@@ -87,53 +88,71 @@
   <div class="kpi-cards-grid">
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Total Income (Money In)</span>
+        <div>
+          <span class="kpi-label">Total Income (Money In)</span>
+          <div class="kpi-period-tag">{{ period_label }}</div>
+        </div>
         <span class="kpi-icon-pill icon-inflow">&#8593;</span>
       </div>
       <div class="kpi-figure text-blue font-mono">{{ format_money(total_income) }}</div>
       <div class="kpi-sub">
-        <span class="kpi-badge-neutral">{{ period_label }}</span>
-        <span>{{ income_count }} income {{ 'entry' if income_count == 1 else 'entries' }}</span>
+        {% if income_delta %}
+          <span class="{% if income_delta.has_prev and income_delta.is_positive %}kpi-badge-positive{% elif income_delta.has_prev %}kpi-badge-negative{% else %}kpi-badge-neutral{% endif %}">{{ income_delta.text }}</span>
+        {% else %}
+          <span class="kpi-badge-neutral">{{ income_count }} {{ 'entry' if income_count == 1 else 'entries' }}</span>
+        {% endif %}
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Total Expenses (Money Spent)</span>
+        <div>
+          <span class="kpi-label">Total Expenses (Money Spent)</span>
+          <div class="kpi-period-tag">{{ period_label }}</div>
+        </div>
         <span class="kpi-icon-pill icon-outflow">&#8595;</span>
       </div>
       <div class="kpi-figure text-dark font-mono">{{ format_money(total_expense) }}</div>
       <div class="kpi-sub">
         <span class="kpi-badge-neutral">{{ spend_pct }}%</span>
-        <span>of your income spent ({{ period_label }})</span>
+        <span>of your income spent</span>
+        {% if expense_delta and expense_delta.has_prev %}
+          <span>&bull; {{ expense_delta.text }}</span>
+        {% endif %}
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">Money Saved</span>
+        <div>
+          <span class="kpi-label">Money Saved</span>
+          <div class="kpi-period-tag">{{ period_label }}</div>
+        </div>
         <span class="kpi-icon-pill icon-savings">&#9670;</span>
       </div>
       <div class="kpi-figure {% if net_profit >= 0 %}text-green{% else %}text-danger{% endif %} font-mono">
         {{ format_money(net_profit) }}
       </div>
       <div class="kpi-sub">
-        <span class="kpi-badge-positive">{{ operating_margin }}%</span>
+        <span class="{% if operating_margin >= 0 %}kpi-badge-positive{% else %}kpi-badge-negative{% endif %}">{{ operating_margin }}%</span>
         <span>Income minus expenses &bull; saved from income</span>
       </div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-top">
-        <span class="kpi-label">
-          Budget Utilization
-          <button type="button" class="help-tip" data-tip="How much of your monthly budget limits you have spent so far." aria-label="What is Budget Utilization">?</button>
-        </span>
+        <div>
+          <span class="kpi-label">
+            Budget Utilization
+            <button type="button" class="help-tip" data-tip="Calculated automatically from your actual expenses matching each budget category." aria-label="What is Budget Utilization">?</button>
+          </span>
+          <div class="kpi-period-tag">{{ budget_scope_label }}</div>
+        </div>
         <span class="kpi-icon-pill icon-budget">&#37;</span>
       </div>
       <div class="kpi-figure text-blue font-mono">{{ budget_utilization }}%</div>
       <div class="kpi-sub">
-        <span class="kpi-badge-neutral">{{ format_money(budget_variance|abs) }}</span>
+        <span class="{% if budget_variance >= 0 %}kpi-badge-neutral{% else %}kpi-badge-negative{% endif %}">{{ format_money(budget_variance|abs) }}</span>
         <span>{% if budget_variance >= 0 %}left in your budget{% else %}over your budget{% endif %}</span>
       </div>
     </div>
@@ -144,7 +163,7 @@
       <div class="chart-card-header">
         <div>
           <h3 class="chart-title">Where Your Money Goes</h3>
-          <span class="chart-caption">Spending by category ({{ period_label }})</span>
+          <span class="chart-caption">Spending by category &bull; {{ period_label }}</span>
         </div>
         <div class="chart-total-pill">
           <span>Total: <strong>{{ format_money(total_expense) }}</strong></span>
@@ -183,7 +202,7 @@
       <div class="chart-card-header">
         <div>
           <h3 class="chart-title">Income vs. Expenses (Last 6 Months)</h3>
-          <span class="chart-caption">See how your money in compares to money spent each month</span>
+          <span class="chart-caption">Recent 6-month trend &bull; <a href="{{ url_for('history') }}">See full multi-year history &rarr;</a></span>
         </div>
         <div class="chart-legend-row">
           <span class="legend-indicator dot-blue"></span> Income
@@ -200,11 +219,12 @@
     <div class="card-header-flex">
       <div>
         <h3 class="card-title">Recent Transactions</h3>
-        <span class="card-caption">Your latest income &amp; spending ({{ period_label }})</span>
+        <span class="card-caption">Your latest income &amp; spending &bull; {{ period_label }}</span>
       </div>
       <div class="header-action-links">
         <a href="{{ url_for('expenses') }}" class="btn-subtle">All Expenses</a>
         <a href="{{ url_for('income') }}" class="btn-subtle">All Income</a>
+        <a href="{{ url_for('history') }}" class="btn-subtle">Full History</a>
         <button type="button" class="btn-sm-primary" onclick="openTransactionModal('expense')">+ Add Expense</button>
       </div>
     </div>
@@ -225,7 +245,10 @@
         <tbody>
           {% for t in transactions %}
             <tr>
-              <td class="font-mono text-muted text-sm">{{ t.date }}</td>
+              <td class="font-mono text-muted text-sm">
+                {{ t.date }}
+                {% if t.date > today_iso %}<span class="badge-upcoming">Upcoming</span>{% endif %}
+              </td>
               <td>
                 <div class="cell-primary-title">{{ t.title }}</div>
                 {% if t.notes %}

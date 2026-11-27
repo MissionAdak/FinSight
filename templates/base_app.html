@@ -34,6 +34,10 @@
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         <span>Budgets</span>
       </a>
+      <a href="{{ url_for('history') }}" class="nav-item {% if active_page == 'history' %}active{% endif %}">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>History</span>
+      </a>
 
       <div class="sidebar-section-label">GROW WEALTH</div>
       <a href="{{ url_for('investments') }}" class="nav-item {% if active_page == 'investments' %}active{% endif %}">
@@ -96,7 +100,7 @@
 
       <div class="monthly-overview-card">
         <div class="mo-header">
-          <span class="mo-title">This Month</span>
+          <span class="mo-title">This Month ({{ sidebar_summary.month_label }})</span>
           <span class="mo-badge">{{ currency_code }}</span>
         </div>
         <div class="mo-row">
@@ -114,10 +118,10 @@
         <div class="mo-budget-meter">
           <div class="mo-meter-label">
             <span>Monthly Budget Used</span>
-            <span>{{ sidebar_summary.budget_pct }}%</span>
+            <span>{{ sidebar_summary.raw_budget_pct }}%</span>
           </div>
           <div class="mo-meter-track">
-            <div class="mo-meter-fill {% if sidebar_summary.budget_pct >= 100 %}fill-danger{% elif sidebar_summary.budget_pct >= 80 %}fill-warning{% else %}fill-blue{% endif %}" data-width="{{ sidebar_summary.budget_pct }}"></div>
+            <div class="mo-meter-fill {% if sidebar_summary.raw_budget_pct >= 100 %}fill-danger{% elif sidebar_summary.raw_budget_pct >= 80 %}fill-warning{% else %}fill-blue{% endif %}" data-width="{{ sidebar_summary.budget_pct }}"></div>
           </div>
         </div>
       </div>
@@ -232,7 +236,7 @@
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="toast-stack" role="status" aria-live="polite">
+        <output class="toast-stack" aria-live="polite">
           {% for category, message in messages %}
             <div class="toast-alert toast-{{ category }}">
               <span class="toast-icon">{% if category == 'danger' %}&#33;{% else %}&#10003;{% endif %}</span>
@@ -241,7 +245,7 @@
               <span class="toast-progress-bar"></span>
             </div>
           {% endfor %}
-        </div>
+        </output>
       {% endif %}
     {% endwith %}
 
@@ -455,7 +459,7 @@
     var submitEl = document.getElementById(cfg.submitId);
     if (!selectEl || !amountEl || !warnEl || !submitEl) return true;
 
-    var amount = parseFloat(amountEl.value);
+    var amount = Number.parseFloat(amountEl.value);
     var opt = selectEl.options[selectEl.selectedIndex];
     var selectedId = selectEl.value;
     var isOutflow = cfg.isExpense !== false;
@@ -473,7 +477,7 @@
       return true;
     }
 
-    var available = parseFloat(opt.dataset.balance || '0');
+    var available = Number.parseFloat(opt.dataset.balance || '0');
     if (cfg.origAccountId && cfg.origAccountId === selectedId && Number.isFinite(cfg.origDelta)) {
       available = available - cfg.origDelta;
     }
@@ -503,7 +507,7 @@
     var form = document.getElementById('editTransactionForm');
     var isExp = document.getElementById('edit-txn-type-expense');
     var origAccId = form ? (form.dataset.origAccountId || '') : '';
-    var origDelta = form ? parseFloat(form.dataset.origDelta || '0') : 0;
+    var origDelta = form ? Number.parseFloat(form.dataset.origDelta || '0') : 0;
     validateAccountBalance({
       selectId: 'edit-txn-account',
       amountId: 'edit-txn-amount',
@@ -562,23 +566,31 @@
     }
   }
 
+  function applyAddTransactionLabels(isIncome) {
+    var copy = isIncome
+      ? { title: 'Add Income', sub: 'Record money you received.', submit: 'Save Income', ph: 'e.g. Monthly salary, Client payment' }
+      : { title: 'Add Expense', sub: 'Record money you spent.', submit: 'Save Expense', ph: 'e.g. Grocery shopping, Electricity bill' };
+    var pairs = [
+      ['txn-modal-title', 'textContent', copy.title],
+      ['txn-modal-subtitle', 'textContent', copy.sub],
+      ['txn-modal-submit', 'textContent', copy.submit],
+      ['txn-title', 'placeholder', copy.ph]
+    ];
+    pairs.forEach(function(item) {
+      var el = document.getElementById(item[0]);
+      if (el) el[item[1]] = item[2];
+    });
+  }
+
   function syncTransactionModalType(mode, txnType, currentCategory) {
-    var isIncome = txnType === 'income';
     if (mode === 'add') {
-      var titleEl = document.getElementById('txn-modal-title');
-      var subEl = document.getElementById('txn-modal-subtitle');
-      var submitEl = document.getElementById('txn-modal-submit');
-      var descEl = document.getElementById('txn-title');
-      if (titleEl) titleEl.textContent = isIncome ? 'Add Income' : 'Add Expense';
-      if (subEl) subEl.textContent = isIncome ? 'Record money you received.' : 'Record money you spent.';
-      if (submitEl) submitEl.textContent = isIncome ? 'Save Income' : 'Save Expense';
-      if (descEl) descEl.placeholder = isIncome ? 'e.g. Monthly salary, Client payment' : 'e.g. Grocery shopping, Electricity bill';
+      applyAddTransactionLabels(txnType === 'income');
       populateCategorySelect(document.getElementById('txn-category'), txnType, currentCategory);
       checkAddTransactionBalance();
-    } else {
-      populateCategorySelect(document.getElementById('edit-txn-category'), txnType, currentCategory);
-      checkEditTransactionBalance();
+      return;
     }
+    populateCategorySelect(document.getElementById('edit-txn-category'), txnType, currentCategory);
+    checkEditTransactionBalance();
   }
 
   function openTransactionModal(defaultType) {
@@ -605,7 +617,7 @@
     var d = btn.dataset;
     var txnType = d.type === 'income' ? 'income' : 'expense';
     var form = document.getElementById('editTransactionForm');
-    var origAmount = parseFloat(d.amount || '0');
+    var origAmount = Number.parseFloat(d.amount || '0');
     if (form) {
       form.action = '/edit-transaction/' + d.id;
       form.dataset.origAccountId = d.accountId || '';
@@ -682,8 +694,43 @@
     if (!el || el.classList.contains('toast-dismissing')) return;
     el.classList.add('toast-dismissing');
     setTimeout(function() {
-      if (el.parentElement) el.parentElement.removeChild(el);
+      el.remove();
     }, 260);
+  }
+
+  function isAsciiDigit(ch) {
+    return ch >= '0' && ch <= '9';
+  }
+
+  function findFirstDigitIndex(text) {
+    for (var i = 0; i < text.length; i++) {
+      if (isAsciiDigit(text.charAt(i))) return i;
+    }
+    return -1;
+  }
+
+  function parseKpiValueParts(text) {
+    var start = findFirstDigitIndex(text);
+    if (start === -1) return null;
+
+    var end = start;
+    var hasDot = false;
+    while (end < text.length) {
+      var c = text.charAt(end);
+      if (isAsciiDigit(c) || c === ',') {
+        end++;
+      } else if (c === '.' && !hasDot && isAsciiDigit(text.charAt(end + 1))) {
+        hasDot = true;
+        end++;
+      } else {
+        break;
+      }
+    }
+    return {
+      prefix: text.slice(0, start),
+      numStr: text.slice(start, end),
+      suffix: text.slice(end)
+    };
   }
 
   function animateKpiNumbers() {
@@ -693,12 +740,12 @@
     var els = document.querySelectorAll('.kpi-figure.font-mono, .kpi-value.font-mono');
     els.forEach(function(el) {
       var original = el.textContent.trim();
-      var m = original.match(/^([^0-9]*)([0-9][0-9,]*(?:\.[0-9]+)?)(.*)$/);
-      if (!m) return;
-      var prefix = m[1];
-      var numStr = m[2];
-      var suffix = m[3];
-      var target = parseFloat(numStr.replace(/,/g, ''));
+      var parts = parseKpiValueParts(original);
+      if (!parts) return;
+      var prefix = parts.prefix;
+      var numStr = parts.numStr;
+      var suffix = parts.suffix;
+      var target = Number.parseFloat(numStr.replaceAll(',', ''));
       if (!Number.isFinite(target) || target === 0) return;
 
       var numParts = numStr.split('.');
@@ -784,7 +831,11 @@
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
         document.querySelectorAll('[data-width]').forEach(function(el) {
-          el.style.width = el.dataset.width + '%';
+          var w = Math.max(0, Math.min(Number.parseFloat(el.dataset.width) || 0, 100));
+          el.style.width = w + '%';
+          if (w > 0 && w < 3) {
+            el.style.minWidth = '6px';
+          }
         });
       });
     });

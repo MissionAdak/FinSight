@@ -5,60 +5,106 @@
 {% block content %}
 <div class="module-page-container">
 
-  <div class="module-summary-grid">
-    <div class="kpi-card">
-      <div class="kpi-top">
-        <span class="kpi-label">
-          Monthly Budget Limit
-          <button type="button" class="help-tip" data-tip="The total amount you plan to spend across all monthly categories." aria-label="What is Monthly Budget Limit">?</button>
-        </span>
-        <span class="kpi-icon-pill icon-budget">M</span>
+  <div class="budget-compare-banner">
+    <div class="budget-compare-card">
+      <div class="budget-compare-header">
+        <div>
+          <strong>Monthly Overview</strong>
+          <span class="kpi-period-tag">{{ selected_month_label }}</span>
+        </div>
+        {% if monthly_income > 0 and total_monthly_allocated > monthly_income %}
+          <span class="budget-status-pill status-warning">Budgets exceed income</span>
+        {% elif total_monthly_spent > total_monthly_allocated and total_monthly_allocated > 0 %}
+          <span class="budget-status-pill status-danger">Over monthly budget</span>
+        {% else %}
+          <span class="budget-status-pill status-success">Within income</span>
+        {% endif %}
       </div>
-      <div class="kpi-figure text-blue font-mono">{{ format_money(total_monthly_allocated) }}</div>
-      <div class="kpi-sub">
-        <span>Spent: {{ format_money(total_monthly_spent) }} ({{ monthly_pct }}%)</span>
+      <div class="budget-compare-metrics">
+        <div class="compare-metric">
+          <span class="compare-label">Monthly Income</span>
+          <strong class="font-mono text-green">{{ format_money(monthly_income) }}</strong>
+        </div>
+        <div class="compare-metric">
+          <span class="compare-label">Monthly Budgeted</span>
+          <strong class="font-mono text-blue">{{ format_money(total_monthly_allocated) }}</strong>
+        </div>
+        <div class="compare-metric">
+          <span class="compare-label">Monthly Spent</span>
+          <strong class="font-mono {% if total_monthly_spent > total_monthly_allocated and total_monthly_allocated > 0 %}text-danger{% else %}text-dark{% endif %}">{{ format_money(total_monthly_spent) }} ({{ monthly_pct }}%)</strong>
+        </div>
       </div>
     </div>
 
-    <div class="kpi-card">
-      <div class="kpi-top">
-        <span class="kpi-label">Yearly Budget Limit</span>
-        <span class="kpi-icon-pill icon-budget">Y</span>
+    <div class="budget-compare-card">
+      <div class="budget-compare-header">
+        <div>
+          <strong>Yearly Overview</strong>
+          <span class="kpi-period-tag">Year {{ selected_year }}</span>
+        </div>
+        {% if yearly_income > 0 and total_yearly_allocated > yearly_income %}
+          <span class="budget-status-pill status-warning">Budgets exceed income</span>
+        {% elif total_yearly_spent > total_yearly_allocated and total_yearly_allocated > 0 %}
+          <span class="budget-status-pill status-danger">Over yearly budget</span>
+        {% else %}
+          <span class="budget-status-pill status-success">On track</span>
+        {% endif %}
       </div>
-      <div class="kpi-figure text-blue font-mono">{{ format_money(total_yearly_allocated) }}</div>
-      <div class="kpi-sub">
-        <span>Spent: {{ format_money(total_yearly_spent) }} ({{ yearly_pct }}%)</span>
-      </div>
-    </div>
-
-    <div class="kpi-card">
-      <div class="kpi-top">
-        <span class="kpi-label">Active Budgets</span>
-        <span class="kpi-icon-pill icon-savings">&#9670;</span>
-      </div>
-      <div class="kpi-figure text-dark">{{ monthly_budgets|length + yearly_budgets|length }} Categories</div>
-      <div class="kpi-sub">
-        <span>{{ monthly_budgets|length }} Monthly &bull; {{ yearly_budgets|length }} Yearly</span>
+      <div class="budget-compare-metrics">
+        <div class="compare-metric">
+          <span class="compare-label">Yearly Income</span>
+          <strong class="font-mono text-green">{{ format_money(yearly_income) }}</strong>
+        </div>
+        <div class="compare-metric">
+          <span class="compare-label">Yearly Budgeted</span>
+          <strong class="font-mono text-blue">{{ format_money(total_yearly_allocated) }}</strong>
+        </div>
+        <div class="compare-metric">
+          <span class="compare-label">Yearly Spent</span>
+          <strong class="font-mono {% if total_yearly_spent > total_yearly_allocated and total_yearly_allocated > 0 %}text-danger{% else %}text-dark{% endif %}">{{ format_money(total_yearly_spent) }} ({{ yearly_pct }}%)</strong>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="budgets-toolbar-flex">
     <div class="budget-period-tabs">
-      <button type="button" class="budget-tab-btn active" onclick="switchBudgetPeriod('monthly', this)">Monthly Budgets ({{ monthly_budgets|length }})</button>
-      <button type="button" class="budget-tab-btn" onclick="switchBudgetPeriod('yearly', this)">Yearly Budgets ({{ yearly_budgets|length }})</button>
+      <button type="button" class="budget-tab-btn {% if active_tab == 'monthly' %}active{% endif %}" data-tab="monthly" onclick="switchBudgetPeriod('monthly', this)">Monthly Budgets ({{ monthly_budgets|length }})</button>
+      <button type="button" class="budget-tab-btn {% if active_tab == 'yearly' %}active{% endif %}" data-tab="yearly" onclick="switchBudgetPeriod('yearly', this)">Yearly Budgets ({{ yearly_budgets|length }})</button>
     </div>
-    <button type="button" class="btn-action-primary" onclick="openModal('modal-add-budget')">+ New Budget</button>
+
+    <div class="budget-toolbar-right">
+      <form method="GET" action="{{ url_for('budgets') }}" id="budgetPeriodPickerForm" class="budget-picker-form">
+        <input type="hidden" name="tab" id="budget-active-tab-input" value="{{ active_tab }}">
+        <div id="picker-monthly-wrap" class="picker-wrap {% if active_tab != 'monthly' %}hidden-el{% endif %}">
+          <label for="budget-month-picker" class="picker-label">Month:</label>
+          <select id="budget-month-picker" name="month" class="field-input picker-select" onchange="this.form.submit()">
+            {% for mo in available_months %}
+              <option value="{{ mo.key }}" {% if selected_month == mo.key %}selected{% endif %}>{{ mo.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="picker-yearly-wrap" class="picker-wrap {% if active_tab != 'yearly' %}hidden-el{% endif %}">
+          <label for="budget-year-picker" class="picker-label">Year:</label>
+          <select id="budget-year-picker" name="year" class="field-input picker-select" onchange="this.form.submit()">
+            {% for yr in available_years %}
+              <option value="{{ yr }}" {% if selected_year == yr %}selected{% endif %}>{{ yr }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </form>
+      <button type="button" class="btn-action-primary" onclick="openModal('modal-add-budget')">+ New Budget</button>
+    </div>
   </div>
 
-  <div id="section-monthly-budgets" class="budget-section-pane active">
+  <div id="section-monthly-budgets" class="budget-section-pane {% if active_tab == 'monthly' %}active{% endif %}">
     <div class="budget-cards-grid">
       {% for b in monthly_budgets %}
         <div class="budget-card">
           <div class="budget-card-header">
             <div>
               <div class="budget-category-name">{{ b.name }}</div>
-              <div class="budget-period-tag">Monthly Limit &bull; Alert at {{ b.alert_threshold }}%</div>
+              <div class="budget-period-tag">{{ selected_month_label }} &bull; Alert at {{ b.alert_threshold }}%</div>
             </div>
             <span class="budget-status-pill {{ b.status_class }}">{{ b.status }}</span>
           </div>
@@ -88,7 +134,7 @@
             {% endif %}
 
             <div class="budget-card-actions">
-              <button type="button" class="btn-budget-action" data-id="{{ b.id }}" data-name="{{ b.name }}" data-allocated="{{ b.allocated }}" data-spent="{{ b.spent }}" data-period="{{ b.period }}" data-threshold="{{ b.alert_threshold }}" onclick="openEditBudgetModal(this)">Edit</button>
+              <button type="button" class="btn-budget-action" data-id="{{ b.id }}" data-name="{{ b.name }}" data-allocated="{{ b.allocated }}" data-period="{{ b.period }}" data-threshold="{{ b.alert_threshold }}" onclick="openEditBudgetModal(this)">Edit</button>
               <form method="POST" action="{{ url_for('delete_budget', budget_id=b.id) }}" style="display:inline;" data-confirm="Remove budget {{ b.name }}?" onsubmit="return confirm(this.dataset.confirm);">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
                 <button type="submit" class="btn-budget-delete" aria-label="Delete budget">&times;</button>
@@ -99,21 +145,21 @@
       {% else %}
         <div class="empty-budget-state" style="grid-column: 1 / -1;">
           <div class="empty-state-title">No monthly budgets yet</div>
-          <p class="empty-state-desc">Set a monthly spending limit for categories like Groceries or Rent to get friendly alerts before you overspend.</p>
+          <p class="empty-state-desc">Set a monthly spending limit for categories like Groceries or Rent. Spent amounts update automatically from your logged expenses.</p>
           <button type="button" class="btn-action-primary" onclick="openModal('modal-add-budget')">+ New Budget</button>
         </div>
       {% endfor %}
     </div>
   </div>
 
-  <div id="section-yearly-budgets" class="budget-section-pane">
+  <div id="section-yearly-budgets" class="budget-section-pane {% if active_tab == 'yearly' %}active{% endif %}">
     <div class="budget-cards-grid">
       {% for b in yearly_budgets %}
         <div class="budget-card">
           <div class="budget-card-header">
             <div>
               <div class="budget-category-name">{{ b.name }}</div>
-              <div class="budget-period-tag">Yearly Limit &bull; Alert at {{ b.alert_threshold }}%</div>
+              <div class="budget-period-tag">Year {{ selected_year }} &bull; Alert at {{ b.alert_threshold }}%</div>
             </div>
             <span class="budget-status-pill {{ b.status_class }}">{{ b.status }}</span>
           </div>
@@ -143,7 +189,7 @@
             {% endif %}
 
             <div class="budget-card-actions">
-              <button type="button" class="btn-budget-action" data-id="{{ b.id }}" data-name="{{ b.name }}" data-allocated="{{ b.allocated }}" data-spent="{{ b.spent }}" data-period="{{ b.period }}" data-threshold="{{ b.alert_threshold }}" onclick="openEditBudgetModal(this)">Edit</button>
+              <button type="button" class="btn-budget-action" data-id="{{ b.id }}" data-name="{{ b.name }}" data-allocated="{{ b.allocated }}" data-period="{{ b.period }}" data-threshold="{{ b.alert_threshold }}" onclick="openEditBudgetModal(this)">Edit</button>
               <form method="POST" action="{{ url_for('delete_budget', budget_id=b.id) }}" style="display:inline;" data-confirm="Remove budget {{ b.name }}?" onsubmit="return confirm(this.dataset.confirm);">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
                 <button type="submit" class="btn-budget-delete" aria-label="Delete budget">&times;</button>
@@ -154,7 +200,7 @@
       {% else %}
         <div class="empty-budget-state" style="grid-column: 1 / -1;">
           <div class="empty-state-title">No yearly budgets yet</div>
-          <p class="empty-state-desc">Great for big annual expenses like travel, insurance, or home maintenance.</p>
+          <p class="empty-state-desc">Great for annual expenses like travel, insurance, or home upgrades.</p>
           <button type="button" class="btn-action-primary" onclick="openModal('modal-add-budget')">+ New Budget</button>
         </div>
       {% endfor %}
@@ -182,29 +228,21 @@
           <input type="text" id="b-name" name="name" class="field-input" placeholder="e.g. Groceries, Food &amp; Dining, Rent" required>
         </div>
 
-        <div class="field-row-grid">
-          <div class="field-group">
-            <label for="b-allocated" class="field-label">Spending Limit ({{ currency_symbol }}) *</label>
-            <div class="input-with-prefix">
-              <span class="input-prefix font-bold">{{ currency_symbol }}</span>
-              <input type="number" step="0.01" min="1.00" id="b-allocated" name="allocated" class="field-input prefix-padded font-mono" placeholder="5000.00" required>
-            </div>
+        <div class="field-group">
+          <label for="b-allocated" class="field-label">Spending Limit ({{ currency_symbol }}) *</label>
+          <div class="input-with-prefix">
+            <span class="input-prefix font-bold">{{ currency_symbol }}</span>
+            <input type="number" step="0.01" min="1.00" id="b-allocated" name="allocated" class="field-input prefix-padded font-mono" placeholder="5000.00" required>
           </div>
-          <div class="field-group">
-            <label for="b-spent" class="field-label">Already Spent ({{ currency_symbol }})</label>
-            <div class="input-with-prefix">
-              <span class="input-prefix font-bold">{{ currency_symbol }}</span>
-              <input type="number" step="0.01" min="0.00" id="b-spent" name="spent" class="field-input prefix-padded font-mono" placeholder="0.00">
-            </div>
-          </div>
+          <span class="field-hint">Spent is tracked automatically from your logged expenses in this category.</span>
         </div>
 
         <div class="field-row-grid">
           <div class="field-group">
             <label for="b-period" class="field-label">How Often?</label>
             <select id="b-period" name="period" class="field-input">
-              <option value="Monthly">Monthly</option>
-              <option value="Yearly">Yearly</option>
+              <option value="Monthly">Monthly (resets every month)</option>
+              <option value="Yearly">Yearly (tracks full calendar year)</option>
             </select>
           </div>
           <div class="field-group">
@@ -243,21 +281,13 @@
           <input type="text" id="edit-b-name" name="name" class="field-input" required>
         </div>
 
-        <div class="field-row-grid">
-          <div class="field-group">
-            <label for="edit-b-allocated" class="field-label">Spending Limit ({{ currency_symbol }}) *</label>
-            <div class="input-with-prefix">
-              <span class="input-prefix font-bold">{{ currency_symbol }}</span>
-              <input type="number" step="0.01" min="1.00" id="edit-b-allocated" name="allocated" class="field-input prefix-padded font-mono" required>
-            </div>
+        <div class="field-group">
+          <label for="edit-b-allocated" class="field-label">Spending Limit ({{ currency_symbol }}) *</label>
+          <div class="input-with-prefix">
+            <span class="input-prefix font-bold">{{ currency_symbol }}</span>
+            <input type="number" step="0.01" min="1.00" id="edit-b-allocated" name="allocated" class="field-input prefix-padded font-mono" required>
           </div>
-          <div class="field-group">
-            <label for="edit-b-spent" class="field-label">Spent So Far ({{ currency_symbol }})</label>
-            <div class="input-with-prefix">
-              <span class="input-prefix font-bold">{{ currency_symbol }}</span>
-              <input type="number" step="0.01" min="0.00" id="edit-b-spent" name="spent" class="field-input prefix-padded font-mono">
-            </div>
-          </div>
+          <span class="field-hint">Spent is tracked automatically from your logged expenses in this category.</span>
         </div>
 
         <div class="field-row-grid">
@@ -292,6 +322,14 @@
     document.querySelectorAll('.budget-section-pane').forEach(function(p) { p.classList.remove('active'); });
     var target = document.getElementById('section-' + period + '-budgets');
     if (target) target.classList.add('active');
+
+    var tabInput = document.getElementById('budget-active-tab-input');
+    if (tabInput) tabInput.value = period;
+
+    var mWrap = document.getElementById('picker-monthly-wrap');
+    var yWrap = document.getElementById('picker-yearly-wrap');
+    if (mWrap) mWrap.classList.toggle('hidden-el', period !== 'monthly');
+    if (yWrap) yWrap.classList.toggle('hidden-el', period !== 'yearly');
   }
 
   function openEditBudgetModal(btn) {
@@ -300,7 +338,6 @@
     form.action = '/edit-budget/' + d.id;
     document.getElementById('edit-b-name').value = d.name || '';
     document.getElementById('edit-b-allocated').value = d.allocated || '';
-    document.getElementById('edit-b-spent').value = d.spent || '';
     document.getElementById('edit-b-period').value = d.period || 'Monthly';
     document.getElementById('edit-b-threshold').value = d.threshold || 80;
     openModal('modal-edit-budget');

@@ -141,7 +141,7 @@
     var submitEl = document.getElementById('new-acc-submit');
     if (!typeEl || !balEl || !warnEl || !submitEl) return;
 
-    var bal = parseFloat(balEl.value);
+    var bal = Number.parseFloat(balEl.value);
     var isCard = typeEl.value === 'Credit Card';
     if (!isCard && Number.isFinite(bal) && bal < 0) {
       warnEl.textContent = 'Only Credit Card accounts can start with a negative balance.';
